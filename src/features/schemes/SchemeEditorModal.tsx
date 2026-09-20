@@ -260,6 +260,7 @@ export default function SchemeEditorModal({
             <Typography.Text strong>IP 配置</Typography.Text>
             <Space size={6}>
               <Switch
+                aria-label="方案的获取方式（自动获取 / 手动设置）"
                 checked={draft.dhcp}
                 checkedChildren="自动"
                 unCheckedChildren="手动"

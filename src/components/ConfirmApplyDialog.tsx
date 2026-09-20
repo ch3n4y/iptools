@@ -1,6 +1,6 @@
 import { Alert, Button, Modal, Space, Spin, Tag, Typography } from "antd";
 import { WarningOutlined } from "@ant-design/icons";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ApplyPlan } from "../lib/types";
 
 interface Props {
@@ -30,14 +30,52 @@ export default function ConfirmApplyDialog({
   onConfirm,
 }: Props) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * Remember what was focused before the dialog opened so focus can be handed
+   * back on close (the built-in restore is unreliable when the trigger
+   * re-renders while the dialog is open).
+   */
+  useEffect(() => {
+    if (open) return undefined;
+    const remember = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body) {
+        triggerRef.current = active;
+      }
+    };
+    document.addEventListener("focusin", remember);
+    document.addEventListener("pointerdown", remember, true);
+    return () => {
+      document.removeEventListener("focusin", remember);
+      document.removeEventListener("pointerdown", remember, true);
+    };
+  }, [open]);
+
+  /**
+   * Initial focus must land inside the dialog: otherwise Escape never reaches
+   * the modal and keyboard users stay on the page behind it. When there is
+   * nothing to confirm the primary button is disabled, so focus falls back to
+   * the cancel button instead.
+   */
+  const focusInitial = useCallback(() => {
+    const confirm = confirmRef.current;
+    if (confirm && !confirm.disabled) {
+      confirm.focus();
+      return;
+    }
+    cancelRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (open && plan && !loadingPlan) {
-      const timer = window.setTimeout(() => confirmRef.current?.focus(), 60);
+      const timer = window.setTimeout(focusInitial, 60);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [open, plan, loadingPlan]);
+  }, [open, plan, loadingPlan, focusInitial]);
 
   const blocked = !!plan && plan.errors.length > 0;
   const nothingToDo = !!plan && plan.changes.length === 0 && plan.errors.length === 0;
@@ -50,9 +88,20 @@ export default function ConfirmApplyDialog({
       maskClosable={!applying}
       keyboard={!applying}
       destroyOnHidden={false}
+      afterOpenChange={(isOpen) => {
+        if (isOpen) {
+          focusInitial();
+          return;
+        }
+        const trigger = triggerRef.current;
+        triggerRef.current = null;
+        if (trigger && document.contains(trigger)) {
+          trigger.focus();
+        }
+      }}
       footer={
         <Space>
-          <Button onClick={onCancel} disabled={applying}>
+          <Button ref={cancelRef} onClick={onCancel} disabled={applying}>
             取消
           </Button>
           <Button

@@ -212,6 +212,7 @@ export default function SettingsView() {
       <SectionCard title="外观" hint="跟随系统会随系统主题自动切换">
         <Space direction="vertical" size={8} style={{ width: "100%" }}>
           <Segmented
+            aria-label="主题模式"
             options={THEME_OPTIONS}
             value={themeMode}
             onChange={(value) => void setThemeMode(value as ThemeMode)}
@@ -229,6 +230,7 @@ export default function SettingsView() {
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Space align="center">
             <Switch
+              aria-label="自动刷新网卡列表"
               checked={settings.autoRefreshAdapters}
               onChange={(checked) => void patchSettings({ autoRefreshAdapters: checked })}
             />
@@ -265,6 +267,7 @@ export default function SettingsView() {
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Space align="center">
             <Switch
+              aria-label="应用配置前二次确认"
               checked={settings.confirmBeforeApply}
               onChange={(checked) => void patchSettings({ confirmBeforeApply: checked })}
             />
@@ -275,6 +278,7 @@ export default function SettingsView() {
           </Typography.Text>
           <Space align="center">
             <Switch
+              aria-label="启动时检查更新"
               checked={settings.checkUpdateOnStart}
               onChange={(checked) => void patchSettings({ checkUpdateOnStart: checked })}
             />
@@ -294,6 +298,7 @@ export default function SettingsView() {
           <Space align="center" wrap>
             <Typography.Text>探测方式</Typography.Text>
             <Segmented
+              aria-label="群 Ping 默认模式"
               options={PING_MODE_OPTIONS}
               value={ping.mode}
               onChange={(value) => void patchSettings({ ping: { ...ping, mode: value as PingMode } })}
@@ -344,6 +349,7 @@ export default function SettingsView() {
 
           <Space align="center" wrap>
             <Switch
+              aria-label="多连发探测"
               checked={ping.multipass}
               onChange={(checked) =>
                 void patchSettings({ ping: { ...ping, multipass: checked } })
@@ -368,7 +374,7 @@ export default function SettingsView() {
           </Space>
 
           <Space align="center" wrap>
-            <Switch checked={ping.slow} onChange={(checked) => void patchSettings({ ping: { ...ping, slow: checked } })} />
+            <Switch checked={ping.slow} onChange={(checked) => void patchSettings({ ping: { ...ping, slow: checked } })} aria-label="慢速模式" />
             <Typography.Text>慢速模式</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               逐个地址顺序探测并延时发送，减轻对网络与交换机的冲击，适合无线或老旧设备；扫描耗时会显著增加。
@@ -414,6 +420,7 @@ export default function SettingsView() {
 
           <Space align="center" wrap>
             <Switch
+              aria-label="便携模式"
               checked={settings.portable}
               loading={portableBusy}
               disabled={portableBusy}

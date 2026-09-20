@@ -8,6 +8,8 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react()],
+  // Relative asset URLs keep the built app working when served from a sub-path.
+  base: "./",
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

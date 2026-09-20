@@ -606,6 +606,7 @@ export default function AdvancedView() {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Space size={6}>
               <Switch
+                aria-label="获取方式（自动获取 / 手动设置）"
                 checked={dhcp}
                 checkedChildren="自动"
                 unCheckedChildren="手动"
