@@ -82,7 +82,7 @@ jobs:
           $assets = gh release view $tag --repo $repo --json assets | ConvertFrom-Json
           $installer = $assets.assets | Where-Object { $_.name -like "*-setup.exe" } | Select-Object -First 1
           if (-not $installer) { throw "未找到安装包资产" }
-          $sigFile = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe.sig | Select-Object -First 1
+          $sigFile = Get-ChildItem -Path src-tauri/target -Recurse -Filter "*-setup.exe.sig" | Select-Object -First 1
           if (-not $sigFile) { throw "未找到签名文件" }
           $signature = (Get-Content $sigFile.FullName -Raw).Trim()
           $manifest = [ordered]@{
