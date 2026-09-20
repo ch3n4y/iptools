@@ -106,3 +106,15 @@ src-tauri/src/
   commands.rs            Tauri 命令层
 docs/                    功能对照与接口契约
 ```
+
+## 命名约定
+
+| 位置 | 名称 |
+| --- | --- |
+| 安装目录 | `C:\Program Files\iptools`（ASCII） |
+| 安装包 | `iptools_<版本>_x64-setup.exe` |
+| 主程序 | `安装目录\IP地址修改器.exe` |
+| 开始菜单 | `iptools\iptools.lnk` |
+| 配置目录 | `%APPDATA%\iptools`（便携模式为程序目录） |
+| 界面与窗口标题 | 中文「IP 地址修改器」 |
+| 卸载列表显示名 | `iptools`（如需中文显示名可加 NSIS 安装后钩子改写） |

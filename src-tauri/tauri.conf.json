@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "IP地址修改器",
+  "productName": "iptools",
   "mainBinaryName": "IP地址修改器",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "com.ch3n4y.iptools",
   "build": {
     "beforeDevCommand": "pnpm dev",

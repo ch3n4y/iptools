@@ -1,6 +1,6 @@
 [package]
 name = "iptools"
-version = "1.0.2"
+version = "1.0.3"
 description = "IP 地址修改器 — Windows 网络配置工具"
 authors = ["ch3n4y"]
 edition = "2021"
