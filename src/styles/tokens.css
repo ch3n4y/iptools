@@ -1,0 +1,111 @@
+/* Semantic design tokens. Light and dark are designed as peers; the resolved
+   theme is stamped on <html data-theme> before React mounts (see index.html). */
+:root {
+  color-scheme: light;
+
+  --surface-app: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --surface-3: #e4e8ef;
+  --surface-inset: #f7f9fc;
+  --overlay: rgba(15, 23, 42, 0.42);
+
+  --text: #101828;
+  --text-soft: #475467;
+  --text-faint: #98a2b3;
+  --text-inverse: #ffffff;
+
+  --line: #d8dee8;
+  --line-strong: #c2cad8;
+
+  --accent: #0b7285;
+  --accent-hover: #0a6070;
+  --accent-soft: rgba(11, 114, 133, 0.1);
+  --accent-line: rgba(11, 114, 133, 0.35);
+
+  --success: #12715b;
+  --success-soft: rgba(18, 113, 91, 0.12);
+  --amber: #9a6700;
+  --amber-soft: rgba(154, 103, 0, 0.14);
+  --danger: #b42318;
+  --danger-soft: rgba(180, 35, 24, 0.12);
+  --info: #1f5fa8;
+  --info-soft: rgba(31, 95, 168, 0.12);
+
+  --ring-focus: 0 0 0 3px rgba(11, 114, 133, 0.35);
+  --elev-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --elev-2: 0 6px 16px rgba(16, 24, 40, 0.12), 0 2px 4px rgba(16, 24, 40, 0.06);
+  --elev-titlebar: 0 1px 0 var(--line);
+
+  --r-xs: 3px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", "JetBrains Mono", ui-monospace, monospace;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+
+  --titlebar-h: 38px;
+  --statusbar-h: 28px;
+  --rail-w: 208px;
+  --content-max: 1180px;
+
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-app: #0e1420;
+  --surface: #141c2a;
+  --surface-2: #1b2536;
+  --surface-3: #243146;
+  --surface-inset: #101825;
+  --overlay: rgba(3, 7, 18, 0.6);
+
+  --text: #e7ecf3;
+  --text-soft: #a9b6c8;
+  --text-faint: #71809a;
+  --text-inverse: #0b1220;
+
+  --line: #28344a;
+  --line-strong: #35455f;
+
+  --accent: #4cc2d6;
+  --accent-hover: #6ad0e0;
+  --accent-soft: rgba(76, 194, 214, 0.14);
+  --accent-line: rgba(76, 194, 214, 0.4);
+
+  --success: #4ed6a8;
+  --success-soft: rgba(78, 214, 168, 0.14);
+  --amber: #f0b642;
+  --amber-soft: rgba(240, 182, 66, 0.16);
+  --danger: #ff7b72;
+  --danger-soft: rgba(255, 123, 114, 0.16);
+  --info: #7cb6ff;
+  --info-soft: rgba(124, 182, 255, 0.16);
+
+  --ring-focus: 0 0 0 3px rgba(76, 194, 214, 0.45);
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 10px 24px rgba(0, 0, 0, 0.55);
+  --elev-titlebar: 0 1px 0 var(--line);
+}

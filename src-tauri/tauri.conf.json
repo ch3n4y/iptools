@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "IP地址修改器",
+  "mainBinaryName": "IP地址修改器",
+  "version": "1.0.0",
+  "identifier": "com.ch3n4y.iptools",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "publisher": "ch3n4y",
+    "copyright": "© 2026 ch3n4y",
+    "category": "Utility",
+    "shortDescription": "Windows 网络配置工具",
+    "longDescription": "IP 地址修改器：查看并修改网卡 IP / 子网掩码 / 网关 / DNS / 跃点数，支持静态与 DHCP 切换、单网卡多 IP、网卡启用禁用、MAC 地址修改、计算机名与工作组修改、方案管理与工具箱（C 网群 Ping 器、子网掩码计算器）。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma",
+        "startMenuFolder": "IP地址修改器"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ch3n4y/iptools/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3QjY3RkI2QTBBMDg3NzkKUldSNWg2Q2d0bisySjJFNGhGc3pkL0tRSUtScXIyZ1ZGZ3BwbHlkWURFRmlhM3dIbnBMOUdSaGkK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
