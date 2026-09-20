@@ -182,9 +182,17 @@ pub fn enumerate() -> AppResult<Vec<RawAdapter>> {
                     .filter(|value| *value != mac);
                 let mac_override = registry::read_network_address(&id);
 
-                let dhcp_enabled = iface
-                    .enable_dhcp
-                    .unwrap_or_else(|| addresses.iter().any(|entry| entry.origin == "dhcp"));
+                // A manual address means the user configured this adapter by
+                // hand; Windows may still report EnableDHCP=1 (Wi-Fi profiles do),
+                // so the presence of manual addresses wins.
+                let has_manual = addresses.iter().any(|entry| entry.origin == "manual");
+                let dhcp_enabled = if has_manual {
+                    false
+                } else {
+                    iface
+                        .enable_dhcp
+                        .unwrap_or_else(|| addresses.iter().any(|entry| entry.origin == "dhcp"))
+                };
 
                 let dns_source = if iface
                     .name_server
@@ -240,6 +248,55 @@ pub fn enumerate() -> AppResult<Vec<RawAdapter>> {
 
             cursor = current.Next;
         }
+    }
+
+    // Disabled adapters are absent from `GetAdaptersAddresses`, so they are
+    // reconstructed from the device tree + registry. Without this they would
+    // vanish from the UI right after being disabled, with no way back.
+    let known: std::collections::HashSet<String> = adapters
+        .iter()
+        .map(|adapter| adapter.info.id.to_lowercase())
+        .collect();
+    for (id, entry) in devices.iter() {
+        if known.contains(id) || !entry.disabled {
+            continue;
+        }
+        let name = registry::connection_name(id)
+            .or_else(|| registry::driver_description(id))
+            .unwrap_or_else(|| entry.instance_id.clone());
+        let description = registry::driver_description(id).unwrap_or_default();
+        adapters.push(RawAdapter {
+            luid_value: 0,
+            info: AdapterInfo {
+                id: id.clone(),
+                name: name.clone(),
+                description: description.clone(),
+                mac: registry::read_network_address(id).unwrap_or_default(),
+                permanent_mac: None,
+                mac_override: registry::read_network_address(id),
+                index: 0,
+                metric: None,
+                mtu: 0,
+                is_wireless: description.to_lowercase().contains("wi-fi")
+                    || description.to_lowercase().contains("wireless"),
+                is_virtual: net::looks_virtual(&name, &description, 0),
+                media_type: "Other".to_string(),
+                status: AdapterStatus::Disabled,
+                link_speed_bps: 0,
+                enabled: false,
+                dhcp_enabled: false,
+                ipv4: Ipv4View {
+                    addresses: Vec::new(),
+                    gateway: None,
+                    gateway_metric: None,
+                },
+                dns: DnsView {
+                    servers: Vec::new(),
+                    source: "dhcp".to_string(),
+                },
+                device_instance_id: Some(entry.instance_id.clone()).filter(|value| !value.is_empty()),
+            },
+        });
     }
 
     // Connected adapters first, then ones with a default gateway, then by index —

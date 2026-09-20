@@ -489,7 +489,7 @@ export default function AdvancedView() {
         <SectionCard title="目标网卡">
           <div className="empty-state">
             <div className="empty-state__title">没有可用的网卡</div>
-            <p>请先在主界面选择一块网卡，再回到本页进行高级配置。</p>
+            <p>请先在「网卡配置」中选择一块网卡，再回到本页进行高级配置。</p>
             <Button
               icon={<ReloadOutlined />}
               loading={working}

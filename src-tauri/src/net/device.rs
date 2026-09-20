@@ -138,6 +138,13 @@ pub fn map_by_net_cfg_id() -> HashMap<String, DeviceEntry> {
                 let net_cfg_id = read_reg_string(key, "NetCfgInstanceId");
                 let config_flags = read_reg_dword(key, "ConfigFlags").unwrap_or(0);
                 let _ = RegCloseKey(key);
+                // Device Manager does not always leave ConfigFlags behind, so the
+                // configuration manager status is authoritative for "disabled".
+                let disabled = devnode_status(data.DevInst)
+                    .map(|problem| {
+                        problem == windows::Win32::Devices::DeviceAndDriverInstallation::CM_PROB_DISABLED
+                    })
+                    .unwrap_or(config_flags & CONFIGFLAG_DISABLED == CONFIGFLAG_DISABLED);
                 if let Some(identifier) = net_cfg_id {
                     if !identifier.trim().is_empty() {
                         map.insert(
@@ -145,7 +152,7 @@ pub fn map_by_net_cfg_id() -> HashMap<String, DeviceEntry> {
                             DeviceEntry {
                                 instance_id,
                                 description: String::new(),
-                                disabled: config_flags & CONFIGFLAG_DISABLED == CONFIGFLAG_DISABLED,
+                                disabled,
                             },
                         );
                     }
@@ -201,7 +208,43 @@ fn change_state(set: &DeviceSet, data: &SP_DEVINFO_DATA, enable: bool) -> AppRes
 }
 
 /// Enables or disables the adapter identified by its NetCfg GUID.
+///
+/// `pnputil` is tried first: it uses the documented device-state API and works
+/// for devices whose class installer rejects `DIF_PROPERTYCHANGE` (Intel Wi-Fi
+/// answers that path with ERROR_INVALID_USER_BUFFER). SetupAPI stays as the
+/// fallback for systems where pnputil cannot resolve the instance.
 pub fn set_enabled(guid: &str, enable: bool) -> AppResult<()> {
+    if let Some(entry) = map_by_net_cfg_id().get(&guid.trim().to_lowercase()) {
+        if !entry.instance_id.is_empty() && set_enabled_pnputil(&entry.instance_id, enable).is_ok() {
+            return Ok(());
+        }
+    }
+    set_enabled_setupapi(guid, enable)
+}
+
+fn set_enabled_pnputil(instance_id: &str, enable: bool) -> AppResult<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let action = if enable { "/enable-device" } else { "/disable-device" };
+    let output = std::process::Command::new("pnputil")
+        .args([action, instance_id])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|err| {
+            AppError::new(ErrorCode::CommandFailed, "无法调用 pnputil 更改设备状态")
+                .detail(err.to_string())
+        })?;
+    let text = decode_oem(&output.stdout) + &decode_oem(&output.stderr);
+    if output.status.success() && !text.to_lowercase().contains("failed") {
+        Ok(())
+    } else {
+        Err(AppError::new(ErrorCode::CommandFailed, "系统拒绝更改设备状态").detail(text))
+    }
+}
+
+/// SetupAPI based state change (legacy fallback).
+fn set_enabled_setupapi(guid: &str, enable: bool) -> AppResult<()> {
     let set = open_device_set()?;
     let target = guid.trim().to_lowercase();
     unsafe {
@@ -229,7 +272,9 @@ pub fn set_enabled(guid: &str, enable: bool) -> AppResult<()> {
             };
             let net_cfg_id = read_reg_string(key, "NetCfgInstanceId");
             let _ = RegCloseKey(key);
-            let Some(identifier) = net_cfg_id else { continue };
+            let Some(identifier) = net_cfg_id else {
+                continue;
+            };
             if identifier.trim().to_lowercase() != target {
                 continue;
             }
@@ -365,4 +410,54 @@ pub fn diagnose() -> serde_json::Value {
         "elevated": crate::net::elevation::is_elevated(),
         "variants": variants,
     })
+}
+
+
+/// Problem code reported by the configuration manager for a device node.
+fn devnode_status(devinst: u32) -> Option<windows::Win32::Devices::DeviceAndDriverInstallation::CM_PROB> {
+    use windows::Win32::Devices::DeviceAndDriverInstallation::{
+        CM_DEVNODE_STATUS_FLAGS, CM_Get_DevNode_Status, CR_SUCCESS,
+    };
+    let mut status = CM_DEVNODE_STATUS_FLAGS(0);
+    let mut problem = windows::Win32::Devices::DeviceAndDriverInstallation::CM_PROB(0);
+    let result = unsafe { CM_Get_DevNode_Status(&mut status, &mut problem, devinst, 0) };
+    if result == CR_SUCCESS {
+        Some(problem)
+    } else {
+        None
+    }
+}
+
+fn decode_oem(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => encoding_rs::GB18030.decode(bytes).0.to_string(),
+    }
+}
+
+/// Restarts a device instance through `pnputil`.
+///
+/// A soft disable/enable cycle is enough for most drivers, but some (notably
+/// Intel Wi-Fi) only re-read `NetworkAddress` when the device stack is rebuilt,
+/// so the MAC write path falls back to this.
+pub fn restart_device(instance_id: &str) -> AppResult<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let output = std::process::Command::new("pnputil")
+        .args(["/restart-device", instance_id])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|err| {
+            AppError::new(ErrorCode::CommandFailed, "无法调用 pnputil 重启设备")
+                .detail(err.to_string())
+        })?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(
+            AppError::new(ErrorCode::CommandFailed, "设备重启失败")
+                .detail(decode_oem(&output.stdout) + &decode_oem(&output.stderr)),
+        )
+    }
 }

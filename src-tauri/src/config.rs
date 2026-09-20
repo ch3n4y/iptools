@@ -1,6 +1,6 @@
 //! Persistence for settings and schemes.
 //!
-//! Layout: `settings.json` and `schemes.json` inside `%APPDATA%\IP地址修改器`,
+//! Layout: `settings.json` and `schemes.json` inside `%APPDATA%\iptools`,
 //! or next to the executable when the portable marker file is present.
 
 use std::fs;
@@ -15,7 +15,7 @@ use crate::dto::{
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::subnet;
 
-pub const APP_DIR_NAME: &str = "IP地址修改器";
+pub const APP_DIR_NAME: &str = "iptools";
 pub const SETTINGS_FILE: &str = "settings.json";
 pub const SCHEMES_FILE: &str = "schemes.json";
 pub const PORTABLE_MARKER: &str = "portable.txt";

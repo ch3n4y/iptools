@@ -4,7 +4,13 @@
 
 html,
 body,
-#root { height: 100%; margin: 0; }
+#root,
+/* antd's <App> wrapper sits between #root and .app-root; without a definite
+   height here, .app-root's `height: 100%` falls back to auto and the whole
+   layout grows past the window, so the content pane never scrolls. */
+#root > .ant-app { height: 100%; margin: 0; }
+
+#root > .ant-app { overflow: hidden; }
 
 body {
   font-family: var(--font-ui);

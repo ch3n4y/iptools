@@ -121,7 +121,7 @@ export default function TitleBar() {
             { value: "system", label: "跟随系统" },
           ]}
         />
-        <Tooltip title="刷新网卡列表（F5）">
+        <Tooltip title="刷新网卡列表">
           <Button
             size="small"
             type="text"

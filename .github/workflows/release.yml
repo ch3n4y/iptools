@@ -66,3 +66,36 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: --target x86_64-pc-windows-msvc
+
+      # tauri-action only uploads latest.json when it can match a signature to an
+      # updater bundle; generate the manifest explicitly so the in-app updater
+      # always has an endpoint (the asset name is resolved from the release
+      # because non-ASCII installer names are sanitised by GitHub).
+      - name: Publish updater manifest (latest.json)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $assets = gh release view $tag --repo $repo --json assets | ConvertFrom-Json
+          $installer = $assets.assets | Where-Object { $_.name -like "*-setup.exe" } | Select-Object -First 1
+          if (-not $installer) { throw "未找到安装包资产" }
+          $sigFile = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe.sig | Select-Object -First 1
+          if (-not $sigFile) { throw "未找到签名文件" }
+          $signature = (Get-Content $sigFile.FullName -Raw).Trim()
+          $manifest = [ordered]@{
+            version   = $version
+            notes     = "IP 地址修改器 $tag"
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = $signature
+                url       = "https://github.com/$repo/releases/download/$tag/$($installer.name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -Path latest.json -Encoding utf8
+          gh release upload $tag latest.json --repo $repo --clobber
+          Get-Content latest.json

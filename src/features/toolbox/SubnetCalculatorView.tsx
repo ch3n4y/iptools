@@ -273,7 +273,7 @@ export default function SubnetCalculatorView() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-head__title">子网掩码计算器</h1>
+          <h1 className="page-head__title">掩码计算</h1>
           <p className="page-head__desc">
             由 IP 与掩码推算网络地址、广播地址、可用主机范围与反掩码；双击任意结果值即可复制。
           </p>

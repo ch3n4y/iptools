@@ -151,13 +151,52 @@ pub fn change_mac(adapter_id: &str, mac: Option<&str>) -> AppResult<AdapterInfo>
     }
     registry::write_network_address(adapter_id, mac)?;
 
-    // Restart the device so the change takes effect immediately.
-    if info.enabled {
-        if device::set_enabled(adapter_id, false).is_ok() {
-            sleep(Duration::from_millis(1200));
-            device::set_enabled(adapter_id, true)?;
-            sleep(Duration::from_millis(1500));
+    // Restart the device so the driver re-reads NetworkAddress.
+    let mut updated = adapters::get(adapter_id)?;
+    if info.enabled && device::set_enabled(adapter_id, false).is_ok() {
+        sleep(Duration::from_millis(1200));
+        let _ = device::set_enabled(adapter_id, true);
+        sleep(Duration::from_millis(1600));
+        updated = adapters::get(adapter_id)?;
+    }
+
+    // Some drivers (Intel Wi-Fi among them) ignore the soft cycle; rebuild the
+    // device stack instead and re-read.
+    if !override_applied(mac, &updated) {
+        if let Some(instance_id) = updated.device_instance_id.clone() {
+            if device::restart_device(&instance_id).is_ok() {
+                // The device disappears from the adapter list while it restarts.
+                let deadline = std::time::Instant::now() + Duration::from_secs(15);
+                loop {
+                    sleep(Duration::from_millis(800));
+                    if let Ok(adapter) = adapters::get(adapter_id) {
+                        updated = adapter;
+                        if override_applied(mac, &updated) || std::time::Instant::now() >= deadline {
+                            break;
+                        }
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        break;
+                    }
+                }
+            }
         }
     }
-    adapters::get(adapter_id)
+    Ok(updated)
+}
+
+/// True when the effective MAC or the recorded override matches the request.
+fn override_applied(requested: Option<&str>, adapter: &AdapterInfo) -> bool {
+    let Some(expected) = requested else {
+        return true; // clearing the override cannot be verified against hardware
+    };
+    let Some(expected) = crate::net::format_mac_string(expected) else {
+        return false;
+    };
+    adapter.mac.eq_ignore_ascii_case(&expected)
+        || adapter
+            .mac_override
+            .as_deref()
+            .map(|value| value.eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
 }

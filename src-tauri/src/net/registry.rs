@@ -206,3 +206,19 @@ pub fn workgroup_or_domain() -> Option<String> {
         .ok()?;
     get_text(&key, "Domain").or_else(|| get_text(&key, "NV Domain"))
 }
+
+/// Registry root that maps a NetCfg GUID to its connection alias.
+pub const NETWORK_CONTROL: &str =
+    r"SYSTEM\CurrentControlSet\Control\Network\{4d36e972-e325-11ce-bfc1-08002be10318}";
+
+/// Friendly name of a connection ("WLAN", "以太网"), available even when the
+/// adapter is disabled and therefore missing from `GetAdaptersAddresses`.
+pub fn connection_name(guid: &str) -> Option<String> {
+    let path = format!("{NETWORK_CONTROL}\\{guid}\\Connection");
+    let key = local_machine().open_subkey_with_flags(&path, KEY_READ).ok()?;
+    get_text(&key, "Name")
+}
+
+pub fn driver_description(guid: &str) -> Option<String> {
+    read_driver_value(guid, "DriverDesc")
+}

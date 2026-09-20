@@ -13,13 +13,15 @@ use std::io::Write;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-const HEADLESS_FLAGS: [&str; 9] = [
+const HEADLESS_FLAGS: [&str; 11] = [
     "--dump-adapters",
     "--dump-config",
     "--dump-devices",
     "--capture-backup",
     "--apply-config",
     "--restore-backup",
+    "--change-mac",
+    "--set-adapter-enabled",
     "--check-update",
     "--selftest",
     "--version",
@@ -107,6 +109,80 @@ fn run_headless(flag: &str, args: &[String]) {
                         "error": serde_json::to_value(&err).unwrap_or_default()
                     }),
                 },
+            };
+            emit_result(&payload.to_string(), out.as_deref());
+        }
+        "--set-adapter-enabled" => {
+            let payload = match flag_value(args, "--adapter") {
+                None => serde_json::json!({ "ok": false, "error": "缺少 --adapter <网卡 GUID>" }),
+                Some(adapter_id) => {
+                    let enable = !args.iter().any(|arg| arg == "--disable");
+                    match crate::net::device::set_enabled(&adapter_id, enable) {
+                        Ok(()) => {
+                            let deadline = std::time::Instant::now()
+                                + std::time::Duration::from_secs(12);
+                            loop {
+                                std::thread::sleep(std::time::Duration::from_millis(700));
+                                match crate::net::adapters::get(&adapter_id) {
+                                    Ok(adapter) if adapter.enabled == enable => break,
+                                    _ if std::time::Instant::now() >= deadline => break,
+                                    _ => continue,
+                                }
+                            }
+                            match crate::net::adapters::get(&adapter_id) {
+                                Ok(adapter) => serde_json::json!({
+                                    "ok": true,
+                                    "enabled": enable,
+                                    "adapter": adapter
+                                }),
+                                Err(err) => serde_json::json!({
+                                    "ok": true,
+                                    "enabled": enable,
+                                    "warning": serde_json::to_value(&err).unwrap_or_default()
+                                }),
+                            }
+                        }
+                        Err(err) => serde_json::json!({
+                            "ok": false,
+                            "error": serde_json::to_value(&err).unwrap_or_default()
+                        }),
+                    }
+                }
+            };
+            emit_result(&payload.to_string(), out.as_deref());
+        }
+        "--change-mac" => {
+            let payload = match flag_value(args, "--adapter") {
+                None => serde_json::json!({ "ok": false, "error": "缺少 --adapter <网卡 GUID>" }),
+                Some(adapter_id) => {
+                    let clear = args.iter().any(|arg| arg == "--clear");
+                    let random = args.iter().any(|arg| arg == "--random");
+                    let mac = if clear {
+                        None
+                    } else if random {
+                        Some(crate::net::random_mac())
+                    } else {
+                        flag_value(args, "--mac")
+                    };
+                    if !clear && mac.is_none() {
+                        serde_json::json!({
+                            "ok": false,
+                            "error": "需要 --mac <地址>、--random 或 --clear"
+                        })
+                    } else {
+                        match crate::net::identity::change_mac(&adapter_id, mac.as_deref()) {
+                            Ok(adapter) => serde_json::json!({
+                                "ok": true,
+                                "requested": mac,
+                                "adapter": adapter
+                            }),
+                            Err(err) => serde_json::json!({
+                                "ok": false,
+                                "error": serde_json::to_value(&err).unwrap_or_default()
+                            }),
+                        }
+                    }
+                }
             };
             emit_result(&payload.to_string(), out.as_deref());
         }
@@ -231,7 +307,22 @@ fn run_apply_config(args: &[String], out: Option<String>, restore: bool) {
             }),
             Ok(text) => {
                 if restore {
-                    match serde_json::from_str::<crate::dto::AdapterBackup>(&text) {
+                    // Accepts both a bare AdapterBackup and the wrapper written by
+                    // `--capture-backup` ({"ok":true,"backup":{...}}).
+                    let backup_value = serde_json::from_str::<serde_json::Value>(&text)
+                        .ok()
+                        .and_then(|value| match value.get("backup") {
+                            Some(inner) if inner.is_object() => Some(inner.clone()),
+                            Some(_) => None,
+                            None => Some(value),
+                        });
+                    let parsed = backup_value
+                        .ok_or_else(|| "备份文件格式不正确".to_string())
+                        .and_then(|value| {
+                            serde_json::from_value::<crate::dto::AdapterBackup>(value)
+                                .map_err(|err| err.to_string())
+                        });
+                    match parsed {
                         Err(err) => serde_json::json!({
                             "ok": false,
                             "error": format!("备份文件解析失败：{err}")

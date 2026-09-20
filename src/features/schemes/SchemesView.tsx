@@ -1,4 +1,4 @@
-import { App as AntApp, Button, Collapse, Dropdown, Input, Modal, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
+import { App as AntApp, Button, Collapse, Dropdown, Empty, Input, Modal, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps, TableProps } from "antd";
 import {
   ArrowDownOutlined,
@@ -16,7 +16,7 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ConfirmApplyDialog from "../../components/ConfirmApplyDialog";
 import SectionCard from "../../components/SectionCard";
 import StatusBanner from "../../components/StatusBanner";
@@ -25,7 +25,7 @@ import { isNative } from "../../lib/api/native";
 import { toAppError, type AppError } from "../../lib/errors";
 import { formatTimestamp } from "../../lib/format";
 import type { ApplyPlan, ApplyResult, ImportReport, Scheme } from "../../lib/types";
-import { APPLY_SELECTED_SCHEME_EVENT, currentAdapter, useAppStore } from "../../state/store";
+import { currentAdapter, useAppStore } from "../../state/store";
 import ApplyResultPanel, { describeApplyResult } from "./ApplyResultPanel";
 import SchemeEditorModal from "./SchemeEditorModal";
 import { SchemeMatchCell, SchemeSummaryCell } from "./SchemeCells";
@@ -201,7 +201,7 @@ export default function SchemesView() {
 
   const confirmCapture = async () => {
     if (!adapterId) {
-      message.warning("请先在主界面选择目标网卡");
+      message.warning("请先在「网卡配置」中选择目标网卡");
       return;
     }
     const name = captureName.trim();
@@ -231,7 +231,7 @@ export default function SchemesView() {
 
   const startApply = async (scheme: Scheme) => {
     if (!adapterId) {
-      message.warning("请先在主界面选择目标网卡");
+      message.warning("请先在「网卡配置」中选择目标网卡");
       return;
     }
     setPlanTarget(scheme);
@@ -383,21 +383,6 @@ export default function SchemesView() {
     }
   };
 
-  // F6 is handled by the shell: it dispatches the event instead of calling into here.
-  const applySelectedRef = useRef<() => void>(() => {});
-  applySelectedRef.current = () => {
-    if (selectedScheme) {
-      void startApply(selectedScheme);
-      return;
-    }
-    message.warning("请先选中一个方案（单击列表行或左侧单选按钮）");
-  };
-
-  useEffect(() => {
-    const handler = () => applySelectedRef.current();
-    window.addEventListener(APPLY_SELECTED_SCHEME_EVENT, handler);
-    return () => window.removeEventListener(APPLY_SELECTED_SCHEME_EVENT, handler);
-  }, []);
 
   const rowMenuItems = (record: Scheme): MenuProps["items"] => {
     const index = schemes.findIndex((item) => item.id === record.id);
@@ -567,7 +552,7 @@ export default function SchemesView() {
     if (key === "capture") {
       if (!ensureNative("读取当前网卡配置")) return;
       if (!adapterId) {
-        message.warning("请先在主界面选择目标网卡");
+        message.warning("请先在「网卡配置」中选择目标网卡");
         return;
       }
       setCaptureName("");
@@ -640,7 +625,7 @@ export default function SchemesView() {
         hint={
           adapter
             ? `目标网卡：${adapter.name}（${adapter.mac}）`
-            : "未选择网卡，应用前请先在主界面选择网卡"
+            : "未选择网卡，应用前请先在「网卡配置」中选择网卡"
         }
         extra={
           <Space>
@@ -657,7 +642,7 @@ export default function SchemesView() {
             >
               应用选中方案
             </Button>
-            <span className="kbd">F6</span>
+            
           </Space>
         }
       >
@@ -669,33 +654,30 @@ export default function SchemesView() {
             </div>
           </div>
         ) : phase === "empty" ? (
-          <div className="empty-state">
-            <div className="empty-state__title">还没有任何方案</div>
-            <p>
-              可以把当前网卡的配置保存为新方案，也可以导入之前导出的 CSV / Excel / JSON 文件。
-              保存后双击列表行或按 F6 即可一键应用。
-            </p>
-            <Space wrap>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                disabled={!adapterId || working}
-                onClick={() => {
-                  if (!ensureNative("读取当前网卡配置")) return;
-                  setCaptureName("");
-                  setCaptureOpen(true);
-                }}
-              >
-                从当前网卡保存为方案
-              </Button>
-              <Button icon={<PlusOutlined />} disabled={working} onClick={() => openEditor(blankScheme())}>
-                新建空白方案
-              </Button>
-              <Button icon={<UploadOutlined />} disabled={working} onClick={() => void pickImportFile()}>
-                从文件导入
-              </Button>
-            </Space>
-          </div>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <Space direction="vertical" size={2}>
+                <Typography.Text>还没有任何方案</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  可以把当前网卡的配置保存为新方案，也可以导入之前导出的 CSV / Excel / JSON 文件。
+                </Typography.Text>
+              </Space>
+            }
+          >
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              disabled={!adapterId || working}
+              onClick={() => {
+                if (!ensureNative("读取当前网卡配置")) return;
+                setCaptureName("");
+                setCaptureOpen(true);
+              }}
+            >
+              从当前网卡保存为方案
+            </Button>
+          </Empty>
         ) : (
           <Table<Scheme>
             size="small"
@@ -704,13 +686,6 @@ export default function SchemesView() {
             columns={columns}
             pagination={false}
             scroll={{ x: 1200 }}
-            rowSelection={{
-              type: "radio",
-              columnTitle: "选择",
-              columnWidth: 40,
-              selectedRowKeys: selectedId ? [selectedId] : [],
-              onChange: (keys) => setSelectedId(typeof keys[0] === "string" ? keys[0] : ""),
-            }}
             onRow={(record) => ({
               onClick: () => setSelectedId(record.id),
               onDoubleClick: (event) => {

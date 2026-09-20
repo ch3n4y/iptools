@@ -29,23 +29,21 @@ export type ViewKey =
 
 export const VIEW_META: Record<
   ViewKey,
-  { label: string; group: string; hotkey?: string; desc: string }
+  { label: string; group: string; desc: string }
 > = {
   home: {
-    label: "主界面",
+    label: "网卡配置",
     group: "网卡",
-    hotkey: "F2",
     desc: "查看并修改当前网卡的 IP / 掩码 / 网关 / DNS",
   },
   identity: {
-    label: "主机与 MAC",
+    label: "主机设置",
     group: "网卡",
-    desc: "计算机名、工作组与网卡 MAC 地址",
+    desc: "计算机名、工作组与网卡 MAC 地址设置",
   },
   schemes: {
     label: "方案管理",
     group: "配置",
-    hotkey: "F6",
     desc: "保存、导入与一键应用常用网络方案",
   },
   advanced: {
@@ -54,33 +52,31 @@ export const VIEW_META: Record<
     desc: "单网卡多 IP、自动网关与子网类掩码",
   },
   ping: {
-    label: "C 网群 Ping 器",
-    group: "工具箱",
-    hotkey: "F8",
-    desc: "ARP / ICMP 批量扫描与结果导出",
+    label: "网络扫描",
+    group: "工具",
+    desc: "批量扫描（原版 C 网群 Ping 器）：ARP / ICMP 探测与结果导出",
   },
   subnet: {
-    label: "子网掩码计算器",
-    group: "工具箱",
-    desc: "掩码、反掩码、网络与主机范围计算",
+    label: "掩码计算",
+    group: "工具",
+    desc: "子网掩码计算器：掩码、反掩码、网络与主机范围",
   },
   settings: {
-    label: "设置",
+    label: "偏好设置",
     group: "应用",
-    desc: "主题、刷新频率、配置位置与自动更新",
+    desc: "主题、刷新频率、配置位置与自动更新设置",
   },
   help: {
-    label: "帮助",
+    label: "使用帮助",
     group: "应用",
-    hotkey: "F1",
-    desc: "快捷键与常见问题说明",
+    desc: "使用流程、功能说明与常见问题",
   },
 };
 
 export const NAV_GROUPS: Array<{ group: string; items: ViewKey[] }> = [
   { group: "网卡", items: ["home", "identity"] },
   { group: "配置", items: ["schemes", "advanced"] },
-  { group: "工具箱", items: ["ping", "subnet"] },
+  { group: "工具", items: ["ping", "subnet"] },
   { group: "应用", items: ["settings", "help"] },
 ];
 
@@ -279,5 +275,4 @@ export function currentAdapter(state: AppState): AdapterInfo | null {
   return state.adapters.find((adapter) => adapter.id === state.selectedAdapterId) ?? null;
 }
 
-/** Custom DOM event used by the F6 shortcut to reach the schemes view. */
-export const APPLY_SELECTED_SCHEME_EVENT = "iptools:apply-selected-scheme";
+

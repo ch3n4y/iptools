@@ -281,7 +281,7 @@ export default function IdentityView() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-head__title">主机与 MAC</h1>
+          <h1 className="page-head__title">主机设置</h1>
           <p className="page-head__desc">
             查看并修改计算机名 / 工作组，以及当前选中网卡的 MAC 地址。写操作需要管理员权限，计算机名与工作组重启后生效。
           </p>

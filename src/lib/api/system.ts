@@ -33,6 +33,6 @@ export async function openNetworkConnections(): Promise<void> {
 }
 
 export async function openAppLocation(): Promise<string> {
-  if (!isNative()) return "%APPDATA%\\IP地址修改器";
+  if (!isNative()) return "%APPDATA%\\iptools";
   return call<string>("open_app_location");
 }

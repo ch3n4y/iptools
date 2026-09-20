@@ -1,63 +1,5 @@
-import { Collapse, Space, Table, Tag, Typography, type TableColumnsType } from "antd";
+import { Collapse, Space, Tag, Typography } from "antd";
 import SectionCard from "../../components/SectionCard";
-
-interface HotkeyRow {
-  key: string;
-  combo: string;
-  action: string;
-  detail: string;
-}
-
-const HOTKEYS: HotkeyRow[] = [
-  {
-    key: "f1",
-    combo: "F1",
-    action: "帮助",
-    detail: "打开本页面，查看快捷键、使用流程与常见问题。",
-  },
-  {
-    key: "f2",
-    combo: "F2",
-    action: "主界面",
-    detail: "返回网卡 IP / 掩码 / 网关 / DNS 的配置主页。",
-  },
-  {
-    key: "f5",
-    combo: "F5",
-    action: "刷新网卡",
-    detail: "重新读取网卡列表与当前状态（等同点击「刷新网卡」按钮）。",
-  },
-  {
-    key: "f6",
-    combo: "F6",
-    action: "方案管理 / 应用选中方案",
-    detail:
-      "第一次按下切换到「方案管理」；再次按下则把列表中选中的方案应用到当前网卡（同样会弹出变更确认）。",
-  },
-  {
-    key: "f8",
-    combo: "F8",
-    action: "工具箱（群 Ping）",
-    detail: "打开 C 网群 Ping 器，进行 ARP / ICMP 批量扫描与结果导出。",
-  },
-  {
-    key: "f12",
-    combo: "F12",
-    action: "打开系统网络连接",
-    detail: "调用系统 ncpa.cpl，打开 Windows「网络连接」窗口。浏览器预览不可用。",
-  },
-];
-
-const HOTKEY_COLUMNS: TableColumnsType<HotkeyRow> = [
-  {
-    title: "按键",
-    dataIndex: "combo",
-    width: 90,
-    render: (value: string) => <span className="kbd">{value}</span>,
-  },
-  { title: "功能", dataIndex: "action", width: 200 },
-  { title: "说明", dataIndex: "detail" },
-];
 
 const FLOW_STEPS: Array<{ step: string; text: string }> = [
   {
@@ -66,7 +8,7 @@ const FLOW_STEPS: Array<{ step: string; text: string }> = [
   },
   {
     step: "2. 读取当前配置",
-    text: "程序自动读取该网卡的地址、掩码、网关、跃点数、DNS 与 DHCP 状态，填入表单作为起点；按 F5 或点击「刷新网卡」可随时重新读取。",
+    text: "程序自动读取该网卡的地址、掩码、网关、跃点数、DNS 与 DHCP 状态，填入表单作为起点；点击「刷新网卡」可随时重新读取。",
   },
   {
     step: "3. 填写目标配置",
@@ -177,7 +119,7 @@ const FAQ: Array<{ key: string; label: string; body: string }> = [
   {
     key: "paths",
     label: "配置存放在哪里？",
-    body: "默认位于 %APPDATA%\\IP地址修改器，含 settings.json（界面设置）与 schemes.json（方案）。开启便携模式后会在程序目录创建 portable.txt，配置改存程序所在目录，可随程序一起拷贝；程序装在 Program Files 等受保护目录时可能因权限无法创建该文件。设置页可以复制这两个路径，或点击「打开配置目录」直接打开。",
+    body: "默认位于 %APPDATA%\\iptools，含 settings.json（界面设置）与 schemes.json（方案）。开启便携模式后会在程序目录创建 portable.txt，配置改存程序所在目录，可随程序一起拷贝；程序装在 Program Files 等受保护目录时可能因权限无法创建该文件。设置页可以复制这两个路径，或点击「打开配置目录」直接打开。",
   },
   {
     key: "arp-icmp",
@@ -196,27 +138,12 @@ export default function HelpView() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-head__title">帮助</h1>
+          <h1 className="page-head__title">使用帮助</h1>
           <p className="page-head__desc">
-            快捷键、使用流程、功能说明与常见问题。按 <span className="kbd">F1</span> 可随时回到本页面。
+            使用流程、功能说明与常见问题；左侧菜单可在各功能页之间切换。
           </p>
         </div>
       </div>
-
-      <SectionCard title="快捷键" hint="功能键在任意页面都可用；在输入框内输入时不会被吞掉">
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Table<HotkeyRow>
-            size="small"
-            rowKey="key"
-            pagination={false}
-            columns={HOTKEY_COLUMNS}
-            dataSource={HOTKEYS}
-          />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            带 Ctrl / Alt / Shift 的组合键不会被本程序拦截，仍由文本框或系统处理。
-          </Typography.Text>
-        </Space>
-      </SectionCard>
 
       <SectionCard title="使用流程" hint="一次完整的配置写入过程">
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
@@ -229,7 +156,7 @@ export default function HelpView() {
             ))}
           </ol>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            任何时候都可以按 F5 重新读取网卡状态；读取不需要管理员权限，写入才需要。
+            任何时候都可以点击「刷新网卡」重新读取状态；读取不需要管理员权限，写入才需要。
           </Typography.Text>
         </Space>
       </SectionCard>
@@ -261,7 +188,7 @@ export default function HelpView() {
           }))}
         />
         <div className="tag-row" style={{ marginTop: 12 }}>
-          <Tag>配置目录：%APPDATA%\IP地址修改器</Tag>
+          <Tag>配置目录：%APPDATA%\iptools</Tag>
           <Tag>便携模式：程序目录</Tag>
           <Tag>读回校验最长约 6 秒</Tag>
         </div>

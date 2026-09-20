@@ -120,7 +120,7 @@ export default function SettingsView() {
       setPortableMessage(
         enabled
           ? "已在程序目录创建 portable.txt，配置改存程序目录；重启程序后下方路径显示会更新。"
-          : "已删除 portable.txt，配置改回 %APPDATA%\\IP地址修改器；重启程序后下方路径显示会更新。",
+          : "已删除 portable.txt，配置改回 %APPDATA%\\iptools；重启程序后下方路径显示会更新。",
       );
     } catch (caught) {
       setPortableError(toAppError(caught));
@@ -168,7 +168,7 @@ export default function SettingsView() {
         title: "打开网络连接失败",
         message:
           appError.code === "NOT_SUPPORTED"
-            ? "浏览器预览不能打开 ncpa.cpl；也可按 F12 在桌面程序中打开。"
+            ? "浏览器预览不能打开 ncpa.cpl；请在桌面程序中使用该按钮。"
             : null,
         error: appError,
       });
@@ -180,7 +180,7 @@ export default function SettingsView() {
       <>
         <div className="page-head">
           <div>
-            <h1 className="page-head__title">设置</h1>
+            <h1 className="page-head__title">偏好设置</h1>
             <p className="page-head__desc">主题、刷新频率、配置位置与自动更新。</p>
           </div>
         </div>
@@ -201,7 +201,7 @@ export default function SettingsView() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-head__title">设置</h1>
+          <h1 className="page-head__title">偏好设置</h1>
           <p className="page-head__desc">
             所有改动都会立即保存到配置文件，无需手动确认。
             {status?.portable ? " 当前运行于便携模式。" : ""}

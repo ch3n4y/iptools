@@ -68,6 +68,6 @@ export async function exportSchemes(path: string, format: "json" | "csv"): Promi
 }
 
 export async function schemesLocation(): Promise<string> {
-  if (!isNative()) return "%APPDATA%\\IP地址修改器\\schemes.json";
+  if (!isNative()) return "%APPDATA%\\iptools\\schemes.json";
   return call<string>("schemes_location");
 }

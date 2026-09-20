@@ -43,9 +43,7 @@ export default function StatusBar() {
       <Tooltip title={status?.osDescription ?? ""}>
         <span>v{status?.version ?? "…"}</span>
       </Tooltip>
-      <span>
-        <span className="kbd">F1</span> 帮助
-      </span>
+
     </footer>
   );
 }

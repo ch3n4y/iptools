@@ -428,7 +428,7 @@ export default function HomeView() {
   const header = (
     <header className="page-head">
       <div>
-        <h1 className="page-head__title">主界面</h1>
+        <h1 className="page-head__title">网卡配置</h1>
         <p className="page-head__desc">
           查看并修改当前网卡的 IP 地址、子网掩码、默认网关与 DNS
         </p>

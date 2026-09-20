@@ -31,9 +31,20 @@ pub fn get_adapter(adapter_id: String) -> AppResult<AdapterInfo> {
 pub fn set_adapter_enabled(adapter_id: String, enabled: bool) -> AppResult<AdapterInfo> {
     elevation::require_elevation(if enabled { "启用网卡" } else { "禁用网卡" })?;
     device::set_enabled(&adapter_id, enabled)?;
-    // Give the device a moment to settle before reporting the new state.
-    std::thread::sleep(std::time::Duration::from_millis(800));
-    adapters::get(&adapter_id)
+    // Poll until the device reports the requested state (its stack needs a
+    // moment to tear down or come back up).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        if let Ok(adapter) = adapters::get(&adapter_id) {
+            if adapter.enabled == enabled {
+                return Ok(adapter);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return adapters::get(&adapter_id);
+        }
+    }
 }
 
 #[tauri::command]

@@ -482,7 +482,7 @@ export default function PingScannerView() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-head__title">C 网群 Ping 器</h1>
+          <h1 className="page-head__title">网络扫描</h1>
           <p className="page-head__desc">
             批量扫描 C 段主机的在线状态与 MAC 地址，支持 ARP / ICMP / 系统 ping 与多连发重试。
           </p>

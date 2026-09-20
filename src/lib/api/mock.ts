@@ -176,9 +176,9 @@ export const mockSettings: AppSettings = {
 export const mockStatus = {
   version: "1.0.0-preview",
   isElevated: false,
-  configDir: "%APPDATA%\\IP地址修改器",
-  schemesPath: "%APPDATA%\\IP地址修改器\\schemes.json",
-  settingsPath: "%APPDATA%\\IP地址修改器\\settings.json",
+  configDir: "%APPDATA%\\iptools",
+  schemesPath: "%APPDATA%\\iptools\\schemes.json",
+  settingsPath: "%APPDATA%\\iptools\\settings.json",
   portable: false,
   osDescription: "浏览器预览（无原生后端）",
 };

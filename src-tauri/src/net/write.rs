@@ -61,9 +61,18 @@ fn adapter_arg(name: &str) -> String {
     format!("name=\"{name}\"")
 }
 
+/// `netsh` returns a non-zero exit code for "DHCP is already enabled", which is
+/// a harmless no-op rather than a failure.
+fn is_benign_dhcp_message(output: &str) -> bool {
+    let text = output.to_lowercase();
+    text.contains("already enabled")
+        || text.contains("已启用 dhcp")
+        || text.contains("已在此接口上启用")
+        || text.contains("dhcp 已启用")
+}
+
 enum Action {
     Netsh(Vec<String>),
-    Metric(u32),
 }
 
 struct Step {
@@ -80,20 +89,33 @@ fn value_or_none(value: Option<&str>) -> String {
         .to_string()
 }
 
-/// Deletes addresses that are about to become stale so a DHCP switch never
-/// leaves partially applied manual addresses behind.
-fn cleanup_steps(adapter_name: &str, before: &AdapterInfo) -> Vec<Step> {
-    let keep_primary = !before.dhcp_enabled;
+/// Deletes manually configured addresses that are about to become stale.
+///
+/// Windows 10 keeps the DHCP flag on some adapters (notably Wi-Fi profiles)
+/// even after a static address is configured, and `netsh ... source=dhcp`
+/// refuses to run while that flag is set — so the write path removes manual
+/// addresses explicitly instead of relying on the mode switch alone.
+fn cleanup_steps(adapter_name: &str, before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
+    let requested: Vec<String> = request
+        .addresses
+        .iter()
+        .map(|spec| spec.address.trim().to_string())
+        .collect();
     before
         .ipv4
         .addresses
         .iter()
-        .enumerate()
-        .filter(|(index, entry)| !(keep_primary && *index == 0 && entry.origin == "manual"))
-        .filter(|(_, entry)| subnet::parse_ipv4(&entry.address).is_some())
-        .map(|(_, entry)| Step {
+        .filter(|entry| entry.origin == "manual")
+        .filter(|entry| {
+            request.dhcp
+                || !requested
+                    .iter()
+                    .any(|address| address.eq_ignore_ascii_case(&entry.address))
+        })
+        .filter(|entry| subnet::parse_ipv4(&entry.address).is_some())
+        .map(|entry| Step {
             name: format!("delete-address-{}", entry.address),
-            label: format!("移除旧地址 {}", entry.address),
+            label: format!("移除旧的手动地址 {}", entry.address),
             action: Action::Netsh(vec![
                 "interface".into(),
                 "ipv4".into(),
@@ -106,10 +128,28 @@ fn cleanup_steps(adapter_name: &str, before: &AdapterInfo) -> Vec<Step> {
         .collect()
 }
 
-fn build_steps(adapter_name: &str, request: &ApplyRequest) -> Vec<Step> {
+fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
+    let adapter_name = before.name.as_str();
     let mut steps: Vec<Step> = Vec::new();
 
     if request.dhcp {
+        // A previous static configuration can leave its default gateway behind
+        // (Windows keeps the DHCP flag on Wi-Fi adapters); drop it explicitly.
+        if let Some(gateway) = before.ipv4.gateway.clone().filter(|value| !value.trim().is_empty()) {
+            steps.push(Step {
+                name: "cleanup-gateway".to_string(),
+                label: format!("清除旧的默认网关 {gateway}"),
+                action: Action::Netsh(vec![
+                    "interface".into(),
+                    "ipv4".into(),
+                    "delete".into(),
+                    "route".into(),
+                    "prefix=0.0.0.0/0".into(),
+                    format!("interface=\"{adapter_name}\""),
+                    format!("nexthop={gateway}"),
+                ]),
+            });
+        }
         steps.push(Step {
             name: "address-dhcp".to_string(),
             label: "切换为自动获取（DHCP）".to_string(),
@@ -219,13 +259,27 @@ fn build_steps(adapter_name: &str, request: &ApplyRequest) -> Vec<Step> {
         _ => {}
     }
 
-    if let Some(metric) = request.metric {
-        steps.push(Step {
-            name: "metric".to_string(),
-            label: format!("设置接口跃点数 {metric}"),
-            action: Action::Metric(metric),
-        });
-    }
+    // The form is the desired end state, so the metric step is always emitted:
+    // an empty field means "back to automatic", which is what a restore of a
+    // backup captured without an explicit metric needs.
+    steps.push(Step {
+        name: "metric".to_string(),
+        label: match request.metric {
+            Some(metric) => format!("设置接口跃点数 {metric}"),
+            None => "恢复自动跃点数".to_string(),
+        },
+        action: Action::Netsh(vec![
+            "interface".into(),
+            "ipv4".into(),
+            "set".into(),
+            "interface".into(),
+            format!("interface=\"{adapter_name}\""),
+            match request.metric {
+                Some(metric) => format!("metric={metric}"),
+                None => "metric=automatic".to_string(),
+            },
+        ]),
+    });
 
     steps
 }
@@ -233,18 +287,29 @@ fn build_steps(adapter_name: &str, request: &ApplyRequest) -> Vec<Step> {
 fn run_step(step: &Step) -> StepResult {
     match &step.action {
         Action::Netsh(args) => match netsh(args) {
-            Ok(outcome) => StepResult {
-                step: step.name.clone(),
-                label: step.label.clone(),
-                ok: outcome.ok,
-                message: if outcome.ok {
-                    "已完成".to_string()
-                } else if outcome.output.is_empty() {
-                    "命令执行失败".to_string()
-                } else {
-                    outcome.output.clone()
-                },
-            },
+            Ok(outcome) => {
+                // `source=dhcp` reports failure when DHCP is already enabled on the
+                // interface; that is the state we want, so treat it as success.
+                let benign = !outcome.ok && is_benign_dhcp_message(&outcome.output);
+                // Cleanup steps are best-effort: the route may already be gone.
+                let tolerant = step.name.starts_with("cleanup-");
+                StepResult {
+                    step: step.name.clone(),
+                    label: step.label.clone(),
+                    ok: outcome.ok || benign || tolerant,
+                    message: if outcome.ok {
+                        "已完成".to_string()
+                    } else if benign {
+                        "系统报告 DHCP 已在启用状态，无需更改".to_string()
+                    } else if tolerant {
+                        format!("已跳过（无需清理）：{}", outcome.output)
+                    } else if outcome.output.is_empty() {
+                        "命令执行失败".to_string()
+                    } else {
+                        outcome.output.clone()
+                    },
+                }
+            }
             Err(err) => StepResult {
                 step: step.name.clone(),
                 label: step.label.clone(),
@@ -252,34 +317,11 @@ fn run_step(step: &Step) -> StepResult {
                 message: err.to_string(),
             },
         },
-        Action::Metric(value) => StepResult {
-            step: step.name.clone(),
-            label: step.label.clone(),
-            ok: false,
-            message: format!("跃点数需要通过网卡标识设置：{value}"),
-        },
+
     }
 }
 
-fn run_step_for(adapter_id: &str, step: &Step) -> StepResult {
-    match &step.action {
-        Action::Metric(value) => match adapters::set_metric(adapter_id, *value) {
-            Ok(()) => StepResult {
-                step: step.name.clone(),
-                label: step.label.clone(),
-                ok: true,
-                message: "已完成".to_string(),
-            },
-            Err(err) => StepResult {
-                step: step.name.clone(),
-                label: step.label.clone(),
-                ok: false,
-                message: err.to_string(),
-            },
-        },
-        Action::Netsh(_) => run_step(step),
-    }
-}
+
 
 pub fn backup_of(info: &AdapterInfo) -> AdapterBackup {
     AdapterBackup {
@@ -501,31 +543,40 @@ fn sets_equal(left: &[String], right: &[String]) -> bool {
 fn compare(target: &AdapterInfo, request: &ApplyRequest) -> Vec<String> {
     let mut mismatches: Vec<String> = Vec::new();
 
-    if target.dhcp_enabled != request.dhcp {
-        mismatches.push(format!(
-            "获取方式未生效：期望{}，实际{}",
-            if request.dhcp { "DHCP" } else { "手动" },
-            if target.dhcp_enabled { "DHCP" } else { "手动" }
-        ));
-    }
+    // Manually configured addresses - not the DHCP registry flag - define the
+    // effective mode: Windows keeps the DHCP flag set on adapters whose Wi-Fi
+    // profile still requests an address automatically, while the manual
+    // addresses take precedence in the stack.
+    let actual_manual: Vec<String> = target
+        .ipv4
+        .addresses
+        .iter()
+        .filter(|entry| entry.origin == "manual")
+        .map(|entry| format!("{}/{}", entry.address, entry.prefix))
+        .collect();
 
-    if !request.dhcp {
+    if request.dhcp {
+        if !actual_manual.is_empty() {
+            mismatches.push(format!(
+                "仍存在手动配置的地址：[{}]",
+                actual_manual.join(", ")
+            ));
+        }
+    } else {
         let expected: Vec<String> = request
             .addresses
             .iter()
             .map(|spec| format!("{}/{}", spec.address, spec.prefix))
             .collect();
-        let actual: Vec<String> = target
-            .ipv4
-            .addresses
-            .iter()
-            .map(|entry| format!("{}/{}", entry.address, entry.prefix))
-            .collect();
-        if !sets_equal(&expected, &actual) {
+        if !sets_equal(&expected, &actual_manual) {
             mismatches.push(format!(
-                "IP 地址不一致：期望 [{}]，实际 [{}]",
+                "IP 地址不一致：期望 [{}]，实际手动地址 [{}]",
                 expected.join(", "),
-                actual.join(", ")
+                if actual_manual.is_empty() {
+                    "无".to_string()
+                } else {
+                    actual_manual.join(", ")
+                }
             ));
         }
 
@@ -565,15 +616,28 @@ fn compare(target: &AdapterInfo, request: &ApplyRequest) -> Vec<String> {
         }
     }
 
-    if let Some(metric) = request.metric {
-        if target.metric != Some(metric) {
-            mismatches.push(format!(
-                "接口跃点数不一致：期望 {metric}，实际 {}",
-                target
-                    .metric
-                    .map(|value| value.to_string())
-                    .unwrap_or_else(|| "自动".to_string())
-            ));
+    match request.metric {
+        Some(metric) => {
+            if target.metric != Some(metric) {
+                mismatches.push(format!(
+                    "接口跃点数不一致：期望 {metric}，实际 {}",
+                    target
+                        .metric
+                        .map(|value| value.to_string())
+                        .unwrap_or_else(|| "自动".to_string())
+                ));
+            }
+        }
+        None => {
+            if target.metric.is_some() {
+                mismatches.push(format!(
+                    "接口跃点数未恢复为自动：实际 {}",
+                    target
+                        .metric
+                        .map(|value| value.to_string())
+                        .unwrap_or_default()
+                ));
+            }
         }
     }
 
@@ -615,12 +679,12 @@ pub fn apply(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
     }
 
     let backup = backup_of(&before);
-    let mut steps = cleanup_steps(&before.name, &before);
-    steps.extend(build_steps(&before.name, request));
+    let mut steps = cleanup_steps(&before.name, &before, request);
+    steps.extend(build_steps(&before, request));
 
     let mut results: Vec<StepResult> = Vec::new();
     for step in &steps {
-        let result = run_step_for(&before.id, step);
+        let result = run_step(step);
         let ok = result.ok;
         results.push(result);
         if !ok {
@@ -634,10 +698,11 @@ pub fn apply(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
 
     if !verified && !request.no_rollback {
         let rollback_request = request_from_backup(&backup);
-        let rollback_steps = build_steps(&before.name, &rollback_request);
+        let current = adapters::get(&before.id).unwrap_or_else(|_| before.clone());
+        let rollback_steps = build_steps(&current, &rollback_request);
         let mut failures: Vec<String> = Vec::new();
         for step in &rollback_steps {
-            let result = run_step_for(&before.id, step);
+            let result = run_step(step);
             if !result.ok {
                 failures.push(format!("{}：{}", result.label, result.message));
             }

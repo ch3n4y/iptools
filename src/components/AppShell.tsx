@@ -1,9 +1,5 @@
-import { useMemo } from "react";
-import { system as systemApi } from "../lib/api";
-import { isNative } from "../lib/api/native";
+import { NAV_GROUPS, VIEW_META, useAppStore, type ViewKey } from "../state/store";
 import { useAdapterPolling } from "../hooks/useAdapterPolling";
-import { useHotkeys } from "../hooks/useHotkeys";
-import { APPLY_SELECTED_SCHEME_EVENT, NAV_GROUPS, VIEW_META, useAppStore, type ViewKey } from "../state/store";
 import ElevationBanner from "./ElevationBanner";
 import StatusBar from "./StatusBar";
 import TitleBar from "./TitleBar";
@@ -30,34 +26,8 @@ const VIEWS: Record<ViewKey, () => React.ReactElement> = {
 export default function AppShell() {
   const view = useAppStore((state) => state.view);
   const setView = useAppStore((state) => state.setView);
-  const refresh = useAppStore((state) => state.refreshAdapters);
 
   useAdapterPolling();
-
-  useHotkeys(
-    useMemo(
-      () => ({
-        f1: () => setView("help"),
-        f2: () => setView("home"),
-        f5: () => void refresh(),
-        f6: () => {
-          if (useAppStore.getState().view !== "schemes") {
-            setView("schemes");
-            return;
-          }
-          window.dispatchEvent(new CustomEvent(APPLY_SELECTED_SCHEME_EVENT));
-        },
-        f8: () => {
-          window.dispatchEvent(new CustomEvent("iptools:toolbox-open"));
-          setView("ping");
-        },
-        f12: () => {
-          if (isNative()) void systemApi.openNetworkConnections();
-        },
-      }),
-      [setView, refresh],
-    ),
-  );
 
   const View = VIEWS[view] ?? HomeView;
 
@@ -69,25 +39,17 @@ export default function AppShell() {
           {NAV_GROUPS.map((group) => (
             <div key={group.group}>
               <div className="rail__group-title">{group.group}</div>
-              {group.items.map((item) => {
-                const meta = VIEW_META[item];
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className="rail__item"
-                    aria-current={view === item ? "page" : undefined}
-                    onClick={() => setView(item)}
-                  >
-                    <span>{meta.label}</span>
-                    {meta.hotkey ? (
-                      <span className="kbd" style={{ marginLeft: "auto" }}>
-                        {meta.hotkey}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
+              {group.items.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className="rail__item"
+                  aria-current={view === item ? "page" : undefined}
+                  onClick={() => setView(item)}
+                >
+                  <span>{VIEW_META[item].label}</span>
+                </button>
+              ))}
             </div>
           ))}
           <div className="rail__spacer" />
