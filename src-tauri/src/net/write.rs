@@ -35,14 +35,24 @@ struct NetshOutcome {
     output: String,
 }
 
+fn netsh_executable() -> std::path::PathBuf {
+    // Absolute path: netsh must never be resolved from the current or program
+    // directory (a portable copy could otherwise shadow the system binary).
+    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    std::path::Path::new(&root)
+        .join("System32")
+        .join("netsh.exe")
+}
+
 fn netsh(args: &[String]) -> AppResult<NetshOutcome> {
-    let output = Command::new("netsh")
+    let output = Command::new(netsh_executable())
         .args(args)
         .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|err| {
             AppError::new(ErrorCode::CommandFailed, "无法执行 netsh 命令").detail(err.to_string())
         })?;
+
     let mut text = decode_console(&output.stdout);
     let stderr = decode_console(&output.stderr);
     if !stderr.trim().is_empty() {
@@ -96,23 +106,21 @@ fn value_or_none(value: Option<&str>) -> String {
 /// refuses to run while that flag is set — so the write path removes manual
 /// addresses explicitly instead of relying on the mode switch alone.
 fn cleanup_steps(adapter_name: &str, before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
-    let requested: Vec<String> = request
-        .addresses
-        .iter()
-        .map(|spec| spec.address.trim().to_string())
-        .collect();
     before
         .ipv4
         .addresses
         .iter()
         .filter(|entry| entry.origin == "manual")
-        .filter(|entry| {
-            request.dhcp
-                || !requested
-                    .iter()
-                    .any(|address| address.eq_ignore_ascii_case(&entry.address))
-        })
         .filter(|entry| subnet::parse_ipv4(&entry.address).is_some())
+        .filter(|entry| {
+            // An address that exactly matches a requested address/prefix is
+            // re-written, not removed; everything else has to go.
+            request.dhcp
+                || !request.addresses.iter().any(|spec| {
+                    spec.address.trim().eq_ignore_ascii_case(&entry.address)
+                        && spec.prefix == entry.prefix
+                })
+        })
         .map(|entry| Step {
             name: format!("delete-address-{}", entry.address),
             label: format!("移除旧的手动地址 {}", entry.address),
@@ -133,9 +141,25 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
     let mut steps: Vec<Step> = Vec::new();
 
     if request.dhcp {
-        // A previous static configuration can leave its default gateway behind
-        // (Windows keeps the DHCP flag on Wi-Fi adapters); drop it explicitly.
-        if let Some(gateway) = before.ipv4.gateway.clone().filter(|value| !value.trim().is_empty()) {
+        // A previous *static* configuration can leave its default gateway behind
+        // (Windows keeps the DHCP flag on Wi-Fi adapters). Only clean it when the
+        // adapter actually carried manual addresses - otherwise the gateway is a
+        // DHCP-provided route that has to stay.
+        let leaves_static_config = before
+            .ipv4
+            .addresses
+            .iter()
+            .any(|entry| entry.origin == "manual");
+        let stale_gateway = if leaves_static_config {
+            before
+                .ipv4
+                .gateway
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+        } else {
+            None
+        };
+        if let Some(gateway) = stale_gateway {
             steps.push(Step {
                 name: "cleanup-gateway".to_string(),
                 label: format!("清除旧的默认网关 {gateway}"),
@@ -171,7 +195,7 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
             adapter_arg(adapter_name),
             "source=static".into(),
             format!("address={}", primary.address),
-            format!("mask={}", primary.mask),
+            format!("mask={}", subnet::mask_text_from_prefix(primary.prefix)),
             format!("gateway={}", value_or_none(request.gateway.as_deref())),
         ];
         if let Some(metric) = request.gateway_metric {
@@ -194,7 +218,7 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
                     "address".into(),
                     adapter_arg(adapter_name),
                     format!("address={}", extra.address),
-                    format!("mask={}", extra.mask),
+                    format!("mask={}", subnet::mask_text_from_prefix(extra.prefix)),
                 ]),
             });
         }
@@ -341,10 +365,13 @@ pub fn backup_of(info: &AdapterInfo) -> AdapterBackup {
     }
 }
 
+/// Only manually configured addresses are part of a backup or a request: a DHCP
+/// lease must never be re-applied as a static address.
 fn current_addresses(info: &AdapterInfo) -> Vec<crate::dto::AddressSpec> {
     info.ipv4
         .addresses
         .iter()
+        .filter(|entry| entry.origin == "manual")
         .filter(|entry| subnet::parse_ipv4(&entry.address).is_some())
         .map(|entry| crate::dto::AddressSpec {
             address: entry.address.clone(),
@@ -562,6 +589,18 @@ fn compare(target: &AdapterInfo, request: &ApplyRequest) -> Vec<String> {
                 actual_manual.join(", ")
             ));
         }
+        // Evidence that automatic addressing is really in effect. The registry
+        // flag is missing on some systems, so only an explicit `false` counts as
+        // a failure.
+        let registry_dhcp = crate::net::registry::read_interface(&target.id).enable_dhcp;
+        let has_dhcp_address = target
+            .ipv4
+            .addresses
+            .iter()
+            .any(|entry| entry.origin == "dhcp");
+        if registry_dhcp == Some(false) && !has_dhcp_address {
+            mismatches.push("自动获取（DHCP）未生效：注册表仍记录为手动配置".to_string());
+        }
     } else {
         let expected: Vec<String> = request
             .addresses
@@ -673,6 +712,13 @@ fn verify(adapter_id: &str, request: &ApplyRequest) -> (bool, Vec<String>, Optio
 pub fn apply(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
     elevation::require_elevation("修改网卡配置")?;
     let before = adapters::get(&request.adapter_id)?;
+    if !before.enabled {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "该网卡当前处于禁用状态，请先启用后再写入配置",
+        )
+        .detail(before.name.clone()));
+    }
     let issues = validate_request(&before, request);
     if let Some(error) = issues.iter().find(|issue| issue.level == "error") {
         return Err(AppError::invalid(error.message.clone()).hint("请修正后再次提交"));
@@ -683,29 +729,53 @@ pub fn apply(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
     steps.extend(build_steps(&before, request));
 
     let mut results: Vec<StepResult> = Vec::new();
+    let mut failed_step: Option<StepResult> = None;
     for step in &steps {
         let result = run_step(step);
         let ok = result.ok;
+        if !ok {
+            failed_step = Some(result.clone());
+        }
         results.push(result);
         if !ok {
             break;
         }
     }
 
-    let (verified, mismatches, adapter) = verify(&before.id, request);
+    let (mut verified, mut mismatches, adapter) = verify(&before.id, request);
+    // A failed step must fail the write even when the read-back looks tolerable:
+    // netsh can leave an interface without an address while the comparison only
+    // sees "no manual addresses left".
+    if let Some(failed) = &failed_step {
+        verified = false;
+        if mismatches.is_empty() {
+            mismatches.push(format!("步骤失败：{} — {}", failed.label, failed.message));
+        }
+    }
+
     let mut rollback_performed = false;
     let mut rollback_message: Option<String> = None;
 
     if !verified && !request.no_rollback {
         let rollback_request = request_from_backup(&backup);
         let current = adapters::get(&before.id).unwrap_or_else(|_| before.clone());
-        let rollback_steps = build_steps(&current, &rollback_request);
+        // The rollback has to clean up what the failed attempt left behind, so it
+        // mirrors the normal write path instead of only replaying the target
+        // configuration.
+        let mut rollback_steps = cleanup_steps(&current.name, &current, &rollback_request);
+        rollback_steps.extend(build_steps(&current, &rollback_request));
         let mut failures: Vec<String> = Vec::new();
         for step in &rollback_steps {
             let result = run_step(step);
             if !result.ok {
                 failures.push(format!("{}：{}", result.label, result.message));
             }
+        }
+        // Verify the rollback itself - reporting "restored" without looking would
+        // be a lie whenever a step silently failed.
+        let (restored, restore_mismatches, _) = verify(&before.id, &rollback_request);
+        if !restored {
+            failures.extend(restore_mismatches);
         }
         rollback_performed = true;
         rollback_message = Some(if failures.is_empty() {
@@ -747,4 +817,217 @@ pub fn apply_unverified(request: &ApplyRequest) -> AppResult<crate::dto::ApplyRe
 /// Captures the current configuration of an adapter by id.
 pub fn backup_of_id(adapter_id: &str) -> AppResult<AdapterBackup> {
     Ok(backup_of(&adapters::get(adapter_id)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::{AdapterInfo, AdapterStatus, AddressEntry, DnsView, Ipv4View};
+
+    fn adapter(addresses: Vec<(&str, u32, &str)>, gateway: Option<&str>) -> AdapterInfo {
+        AdapterInfo {
+            id: "{TEST-GUID}".to_string(),
+            name: "测试网卡".to_string(),
+            description: "Test Adapter".to_string(),
+            mac: "AA-BB-CC-DD-EE-FF".to_string(),
+            permanent_mac: None,
+            mac_override: None,
+            index: 5,
+            metric: None,
+            mtu: 1500,
+            is_wireless: false,
+            is_virtual: false,
+            media_type: "Ethernet".to_string(),
+            status: AdapterStatus::Connected,
+            link_speed_bps: 1_000_000_000,
+            enabled: true,
+            dhcp_enabled: !addresses.iter().any(|(_, _, origin)| *origin == "manual"),
+            ipv4: Ipv4View {
+                addresses: addresses
+                    .into_iter()
+                    .map(|(address, prefix, origin)| AddressEntry {
+                        address: address.to_string(),
+                        prefix,
+                        mask: subnet::mask_text_from_prefix(prefix),
+                        origin: origin.to_string(),
+                    })
+                    .collect(),
+                gateway: gateway.map(str::to_string),
+                gateway_metric: None,
+            },
+            dns: DnsView {
+                servers: Vec::new(),
+                source: "dhcp".to_string(),
+            },
+            device_instance_id: None,
+        }
+    }
+
+    fn static_request(addresses: &[(&str, u32)], gateway: Option<&str>) -> ApplyRequest {
+        ApplyRequest {
+            adapter_id: "{TEST-GUID}".to_string(),
+            dhcp: false,
+            addresses: addresses
+                .iter()
+                .map(|(address, prefix)| crate::dto::AddressSpec {
+                    address: address.to_string(),
+                    prefix: *prefix,
+                    mask: subnet::mask_text_from_prefix(*prefix),
+                })
+                .collect(),
+            gateway: gateway.map(str::to_string),
+            gateway_metric: None,
+            dns_mode: DnsMode::Static,
+            dns: vec!["1.1.1.1".to_string()],
+            metric: Some(20),
+            no_rollback: false,
+        }
+    }
+
+    fn dhcp_request() -> ApplyRequest {
+        ApplyRequest {
+            adapter_id: "{TEST-GUID}".to_string(),
+            dhcp: true,
+            addresses: Vec::new(),
+            gateway: None,
+            gateway_metric: None,
+            dns_mode: DnsMode::Dhcp,
+            dns: Vec::new(),
+            metric: None,
+            no_rollback: false,
+        }
+    }
+
+    fn step_names(steps: &[Step]) -> Vec<String> {
+        steps.iter().map(|step| step.name.clone()).collect()
+    }
+
+    fn netsh_args(steps: &[Step], name: &str) -> Vec<String> {
+        steps
+            .iter()
+            .find(|step| step.name == name)
+            .map(|step| match &step.action {
+                Action::Netsh(args) => args.clone(),
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn static_request_writes_mask_derived_from_prefix() {
+        // mask 与 prefix 不一致时，netsh 只应看到由 prefix 派生的掩码
+        let info = adapter(vec![("10.0.0.9", 24, "manual")], None);
+        let mut request = static_request(&[("10.0.0.9", 25)], Some("10.0.0.1"));
+        request.addresses[0].mask = "255.0.0.0".to_string();
+        let steps = build_steps(&info, &request);
+        let args = netsh_args(&steps, "address-primary");
+        assert!(args.contains(&"mask=255.255.255.128".to_string()), "{args:?}");
+        assert!(!args.iter().any(|arg| arg == "mask=255.0.0.0"), "{args:?}");
+    }
+
+    #[test]
+    fn cleanup_removes_stale_manual_addresses_only() {
+        let info = adapter(
+            vec![
+                ("10.0.0.9", 24, "manual"),
+                ("10.0.0.10", 24, "manual"),
+                ("169.254.1.2", 16, "other"),
+            ],
+            None,
+        );
+        // 同地址但前缀不同 -> 需删除
+        let request = static_request(&[("10.0.0.9", 25)], None);
+        let names = step_names(&cleanup_steps("测试网卡", &info, &request));
+        assert!(names.contains(&"delete-address-10.0.0.9".to_string()), "{names:?}");
+        assert!(names.contains(&"delete-address-10.0.0.10".to_string()), "{names:?}");
+        assert_eq!(names.len(), 2, "不应删除 DHCP/APIPA 地址：{names:?}");
+
+        // 完全相同的地址/前缀不删除
+        let same = static_request(&[("10.0.0.9", 24)], None);
+        let names = step_names(&cleanup_steps("测试网卡", &info, &same));
+        assert_eq!(names, vec!["delete-address-10.0.0.10".to_string()]);
+
+        // DHCP 请求删除全部手动地址
+        let names = step_names(&cleanup_steps("测试网卡", &info, &dhcp_request()));
+        assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn dhcp_request_only_cleans_gateway_left_by_static_config() {
+        let manual = adapter(vec![("10.0.0.9", 24, "manual")], Some("10.0.0.1"));
+        let names = step_names(&build_steps(&manual, &dhcp_request()));
+        assert!(names.contains(&"cleanup-gateway".to_string()), "{names:?}");
+
+        // 已是 DHCP（网关由 DHCP 下发）时不得删除默认路由
+        let leased = adapter(vec![("192.168.1.20", 24, "dhcp")], Some("192.168.1.1"));
+        let names = step_names(&build_steps(&leased, &dhcp_request()));
+        assert!(!names.contains(&"cleanup-gateway".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn metric_step_is_always_emitted() {
+        let info = adapter(vec![("10.0.0.9", 24, "manual")], None);
+        let fixed = build_steps(&info, &static_request(&[("10.0.0.9", 24)], None));
+        assert!(netsh_args(&fixed, "metric").contains(&"metric=20".to_string()));
+        let automatic = build_steps(&info, &dhcp_request());
+        assert!(netsh_args(&automatic, "metric").contains(&"metric=automatic".to_string()));
+    }
+
+    #[test]
+    fn dhcp_step_message_is_recognised_as_benign() {
+        assert!(is_benign_dhcp_message("DHCP is already enabled on this interface."));
+        assert!(is_benign_dhcp_message("已在此接口上启用 DHCP。"));
+        assert!(!is_benign_dhcp_message("The parameter is incorrect."));
+    }
+
+    #[test]
+    fn compare_reports_manual_leftovers_and_missing_addresses() {
+        let request = static_request(&[("10.0.0.9", 24)], Some("10.0.0.1"));
+        // A request derived from the live state must compare clean: DNS mode and
+        // metric come from the adapter itself.
+        let good = adapter(vec![("10.0.0.9", 24, "manual")], Some("10.0.0.1"));
+        let derived = request_from(&good);
+        assert!(
+            compare(&good, &derived).is_empty(),
+            "{:?}",
+            compare(&good, &derived)
+        );
+
+        let missing = adapter(vec![("169.254.1.2", 16, "other")], None);
+        let problems = compare(&missing, &request);
+        assert!(problems.iter().any(|item| item.contains("IP 地址不一致")), "{problems:?}");
+
+        // DHCP 请求：残留手动地址必须报错
+        let leftover = adapter(vec![("10.0.0.9", 24, "manual")], None);
+        let problems = compare(&leftover, &dhcp_request());
+        assert!(problems.iter().any(|item| item.contains("仍存在手动配置的地址")), "{problems:?}");
+    }
+
+    #[test]
+    fn compare_requires_automatic_metric_for_empty_request() {
+        let request = dhcp_request();
+        let mut leased = adapter(vec![("192.168.1.20", 24, "dhcp")], Some("192.168.1.1"));
+        leased.metric = None;
+        assert!(compare(&leased, &request).is_empty(), "{:?}", compare(&leased, &request));
+        leased.metric = Some(25);
+        assert!(compare(&leased, &request)
+            .iter()
+            .any(|item| item.contains("未恢复为自动")));
+    }
+
+    #[test]
+    fn rollback_payload_is_derived_from_manual_addresses_only() {
+        let info = adapter(
+            vec![("10.0.0.9", 24, "manual"), ("192.168.1.20", 24, "dhcp")],
+            Some("10.0.0.1"),
+        );
+        let backup = backup_of(&info);
+        assert!(!backup.dhcp);
+        assert_eq!(backup.addresses.len(), 1, "DHCP 租约地址不应进入备份");
+        assert_eq!(backup.addresses[0].address, "10.0.0.9");
+
+        let leased_only = adapter(vec![("192.168.1.20", 24, "dhcp")], Some("192.168.1.1"));
+        let backup = backup_of(&leased_only);
+        assert!(backup.dhcp);
+        assert!(backup.addresses.is_empty());
+    }
 }

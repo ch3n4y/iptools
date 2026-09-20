@@ -155,9 +155,14 @@ pub fn change_mac(adapter_id: &str, mac: Option<&str>) -> AppResult<AdapterInfo>
     let mut updated = adapters::get(adapter_id)?;
     if info.enabled && device::set_enabled(adapter_id, false).is_ok() {
         sleep(Duration::from_millis(1200));
-        let _ = device::set_enabled(adapter_id, true);
-        sleep(Duration::from_millis(1600));
-        updated = adapters::get(adapter_id)?;
+        device::set_enabled(adapter_id, true).map_err(|err| {
+            AppError::new(
+                ErrorCode::CommandFailed,
+                "网卡已关闭但重新启用失败，请在系统「设备管理器」中手动启用该网卡",
+            )
+            .detail(err.to_string())
+        })?;
+        updated = wait_for_enabled(adapter_id, Duration::from_secs(15))?;
     }
 
     // Some drivers (Intel Wi-Fi among them) ignore the soft cycle; rebuild the
@@ -183,6 +188,27 @@ pub fn change_mac(adapter_id: &str, mac: Option<&str>) -> AppResult<AdapterInfo>
         }
     }
     Ok(updated)
+}
+
+/// Polls until the adapter reports itself enabled again (a restart hides it for
+/// a few seconds); failing to come back is an error, never a silent success.
+fn wait_for_enabled(adapter_id: &str, timeout: Duration) -> AppResult<AdapterInfo> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        sleep(Duration::from_millis(700));
+        if let Ok(adapter) = adapters::get(adapter_id) {
+            if adapter.enabled {
+                return Ok(adapter);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(AppError::new(
+                ErrorCode::CommandFailed,
+                "网卡在重启后未回到启用状态，请在系统设置中检查",
+            )
+            .detail(adapter_id.to_string()));
+        }
+    }
 }
 
 /// True when the effective MAC or the recorded override matches the request.

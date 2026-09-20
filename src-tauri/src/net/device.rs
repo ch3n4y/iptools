@@ -227,7 +227,7 @@ fn set_enabled_pnputil(instance_id: &str, enable: bool) -> AppResult<()> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
     let action = if enable { "/enable-device" } else { "/disable-device" };
-    let output = std::process::Command::new("pnputil")
+    let output = std::process::Command::new(pnputil_executable())
         .args([action, instance_id])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
@@ -316,7 +316,7 @@ pub fn diagnose() -> serde_json::Value {
     for (label, class_guid, flags) in attempts {
         let mut report = serde_json::Map::new();
         report.insert("variant".to_string(), serde_json::Value::from(label));
-        let set = unsafe {
+        let opened = unsafe {
             SetupDiGetClassDevsW(
                 class_guid,
                 PCWSTR::null(),
@@ -324,7 +324,8 @@ pub fn diagnose() -> serde_json::Value {
                 windows::Win32::Devices::DeviceAndDriverInstallation::SETUP_DI_GET_CLASS_DEVS_FLAGS(flags),
             )
         };
-        let set = match set {
+        // DeviceSet releases the info set on drop, so nothing leaks here.
+        let set = match opened.map(|handle| DeviceSet { handle }) {
             Ok(set) => set,
             Err(err) => {
                 report.insert(
@@ -349,7 +350,7 @@ pub fn diagnose() -> serde_json::Value {
                     DevInst: 0,
                     Reserved: 0,
                 };
-                if SetupDiEnumDeviceInfo(set, index, &mut data).is_err() {
+                if SetupDiEnumDeviceInfo(set.handle, index, &mut data).is_err() {
                     break;
                 }
                 index += 1;
@@ -359,13 +360,13 @@ pub fn diagnose() -> serde_json::Value {
                 }
                 if instance_samples.len() < 3 {
                     let mut buffer = [0u16; 512];
-                    if SetupDiGetDeviceInstanceIdW(set, &data, Some(&mut buffer), None).is_ok() {
+                    if SetupDiGetDeviceInstanceIdW(set.handle, &data, Some(&mut buffer), None).is_ok() {
                         let end = buffer.iter().position(|unit| *unit == 0).unwrap_or(buffer.len());
                         instance_samples.push(String::from_utf16_lossy(&buffer[..end]));
                     }
                 }
                 match SetupDiOpenDevRegKey(
-                    set,
+                    set.handle,
                     &data,
                     DICS_FLAG_GLOBAL.0,
                     0,
@@ -428,6 +429,15 @@ fn devnode_status(devinst: u32) -> Option<windows::Win32::Devices::DeviceAndDriv
     }
 }
 
+/// Absolute path so a same-named file next to the executable can never be
+/// executed instead of the system tool.
+fn pnputil_executable() -> std::path::PathBuf {
+    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    std::path::Path::new(&root)
+        .join("System32")
+        .join("pnputil.exe")
+}
+
 fn decode_oem(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(text) => text.to_string(),
@@ -444,7 +454,7 @@ pub fn restart_device(instance_id: &str) -> AppResult<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    let output = std::process::Command::new("pnputil")
+    let output = std::process::Command::new(pnputil_executable())
         .args(["/restart-device", instance_id])
         .creation_flags(CREATE_NO_WINDOW)
         .output()

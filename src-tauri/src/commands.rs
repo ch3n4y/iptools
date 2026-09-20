@@ -28,7 +28,7 @@ pub fn get_adapter(adapter_id: String) -> AppResult<AdapterInfo> {
 }
 
 #[tauri::command]
-pub fn set_adapter_enabled(adapter_id: String, enabled: bool) -> AppResult<AdapterInfo> {
+pub async fn set_adapter_enabled(adapter_id: String, enabled: bool) -> AppResult<AdapterInfo> {
     elevation::require_elevation(if enabled { "启用网卡" } else { "禁用网卡" })?;
     device::set_enabled(&adapter_id, enabled)?;
     // Poll until the device reports the requested state (its stack needs a
@@ -42,7 +42,13 @@ pub fn set_adapter_enabled(adapter_id: String, enabled: bool) -> AppResult<Adapt
             }
         }
         if std::time::Instant::now() >= deadline {
-            return adapters::get(&adapter_id);
+            let actual = adapters::get(&adapter_id).ok().map(|adapter| adapter.enabled);
+            return Err(AppError::new(
+                ErrorCode::CommandFailed,
+                "网卡状态未在预期时间内切换",
+            )
+            .detail(format!("期望 enabled={enabled}，实际 {actual:?}"))
+            .hint("可在系统「网络连接」中确认设备状态后重试"));
         }
     }
 }
@@ -53,7 +59,7 @@ pub fn random_mac_address() -> String {
 }
 
 #[tauri::command]
-pub fn change_mac(adapter_id: String, mac: Option<String>) -> AppResult<AdapterInfo> {
+pub async fn change_mac(adapter_id: String, mac: Option<String>) -> AppResult<AdapterInfo> {
     let normalized = mac
         .as_deref()
         .map(str::trim)
@@ -72,7 +78,7 @@ pub fn plan_apply(request: ApplyRequest) -> AppResult<ApplyPlan> {
 }
 
 #[tauri::command]
-pub fn apply_config(request: ApplyRequest) -> AppResult<ApplyResult> {
+pub async fn apply_config(request: ApplyRequest) -> AppResult<ApplyResult> {
     write::apply(&request)
 }
 
@@ -82,7 +88,7 @@ pub fn capture_backup(adapter_id: String) -> AppResult<AdapterBackup> {
 }
 
 #[tauri::command]
-pub fn restore_backup(backup: AdapterBackup) -> AppResult<ApplyResult> {
+pub async fn restore_backup(backup: AdapterBackup) -> AppResult<ApplyResult> {
     let request = write::request_from_backup(&backup);
     write::apply(&request)
 }

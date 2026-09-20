@@ -117,6 +117,15 @@ fn run_headless(flag: &str, args: &[String]) {
                 None => serde_json::json!({ "ok": false, "error": "缺少 --adapter <网卡 GUID>" }),
                 Some(adapter_id) => {
                     let enable = !args.iter().any(|arg| arg == "--disable");
+                    if !crate::net::elevation::is_elevated() {
+                        serde_json::json!({
+                            "ok": false,
+                            "error": {
+                                "code": "NOT_ELEVATED",
+                                "message": "更改网卡启停状态需要管理员权限"
+                            }
+                        })
+                    } else {
                     match crate::net::device::set_enabled(&adapter_id, enable) {
                         Ok(()) => {
                             let deadline = std::time::Instant::now()
@@ -131,8 +140,8 @@ fn run_headless(flag: &str, args: &[String]) {
                             }
                             match crate::net::adapters::get(&adapter_id) {
                                 Ok(adapter) => serde_json::json!({
-                                    "ok": true,
-                                    "enabled": enable,
+                                    "ok": adapter.enabled == enable,
+                                    "enabled": adapter.enabled,
                                     "adapter": adapter
                                 }),
                                 Err(err) => serde_json::json!({
@@ -146,6 +155,7 @@ fn run_headless(flag: &str, args: &[String]) {
                             "ok": false,
                             "error": serde_json::to_value(&err).unwrap_or_default()
                         }),
+                    }
                     }
                 }
             };

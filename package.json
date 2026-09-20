@@ -1,7 +1,7 @@
 {
   "name": "iptools",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "IP 地址修改器 — Windows 网络配置工具（Tauri 2 + React 重写版）",
   "scripts": {
