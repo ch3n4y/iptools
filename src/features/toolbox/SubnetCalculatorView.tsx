@@ -244,9 +244,13 @@ export default function SubnetCalculatorView() {
   function onScanNetwork() {
     if (!calc) return;
     const spec = `${calc.network}/${calc.prefix}`;
-    window.dispatchEvent(new CustomEvent("iptools:scan-spec", { detail: { spec } }));
-    void message.success(`已把网段 ${spec} 发送给群 Ping 页`);
-    setView("ping");
+    // Switch first, then hand the range over on the next tick: the toolbox (and
+    // the scanner inside it) only subscribe once they are mounted.
+    setView("toolbox");
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("iptools:scan-spec", { detail: { spec } }));
+    }, 80);
+    void message.success(`已把网段 ${spec} 交给网络扫描`);
   }
 
   const items: DescriptionsProps["items"] = calc

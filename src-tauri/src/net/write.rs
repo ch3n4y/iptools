@@ -187,7 +187,7 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
             ]),
         });
     } else if let Some(primary) = request.addresses.first() {
-        let mut args: Vec<String> = vec![
+        let args: Vec<String> = vec![
             "interface".into(),
             "ipv4".into(),
             "set".into(),
@@ -198,9 +198,6 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
             format!("mask={}", subnet::mask_text_from_prefix(primary.prefix)),
             format!("gateway={}", value_or_none(request.gateway.as_deref())),
         ];
-        if let Some(metric) = request.gateway_metric {
-            args.push(format!("gwmetric={metric}"));
-        }
         steps.push(Step {
             name: "address-primary".to_string(),
             label: format!("设置主 IP {}", primary.address),
@@ -354,7 +351,6 @@ pub fn backup_of(info: &AdapterInfo) -> AdapterBackup {
         dhcp: info.dhcp_enabled,
         addresses: current_addresses(info),
         gateway: info.ipv4.gateway.clone(),
-        gateway_metric: info.ipv4.gateway_metric,
         dns_mode: if info.dns.source == "static" && !info.dns.servers.is_empty() {
             DnsMode::Static
         } else {
@@ -387,7 +383,6 @@ pub fn request_from(info: &AdapterInfo) -> ApplyRequest {
         dhcp: info.dhcp_enabled,
         addresses: current_addresses(info),
         gateway: info.ipv4.gateway.clone(),
-        gateway_metric: info.ipv4.gateway_metric,
         dns_mode: if info.dns.source == "static" && !info.dns.servers.is_empty() {
             DnsMode::Static
         } else {
@@ -405,7 +400,6 @@ pub fn request_from_backup(backup: &AdapterBackup) -> ApplyRequest {
         dhcp: backup.dhcp,
         addresses: backup.addresses.clone(),
         gateway: backup.gateway.clone(),
-        gateway_metric: backup.gateway_metric,
         dns_mode: backup.dns_mode,
         dns: backup.dns.clone(),
         metric: backup.metric,
@@ -853,7 +847,6 @@ mod tests {
                     })
                     .collect(),
                 gateway: gateway.map(str::to_string),
-                gateway_metric: None,
             },
             dns: DnsView {
                 servers: Vec::new(),
@@ -876,7 +869,6 @@ mod tests {
                 })
                 .collect(),
             gateway: gateway.map(str::to_string),
-            gateway_metric: None,
             dns_mode: DnsMode::Static,
             dns: vec!["1.1.1.1".to_string()],
             metric: Some(20),
@@ -890,7 +882,6 @@ mod tests {
             dhcp: true,
             addresses: Vec::new(),
             gateway: None,
-            gateway_metric: None,
             dns_mode: DnsMode::Dhcp,
             dns: Vec::new(),
             metric: None,

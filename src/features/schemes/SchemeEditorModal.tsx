@@ -51,7 +51,6 @@ export default function SchemeEditorModal({
 }: Props) {
   const [draft, setDraft] = useState<Scheme>(() => scheme ?? blankScheme());
   const [rows, setRows] = useState<AddressRow[]>([]);
-  const [gatewayMetricText, setGatewayMetricText] = useState("");
   const [metricText, setMetricText] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -64,7 +63,6 @@ export default function SchemeEditorModal({
         ? next.addresses.map((spec) => ({ address: spec.address, mask: spec.mask }))
         : [{ address: "", mask: "255.255.255.0" }],
     );
-    setGatewayMetricText(next.gatewayMetric === null ? "" : String(next.gatewayMetric));
     setMetricText(next.metric === null ? "" : String(next.metric));
     setFormError(null);
   }, [open, scheme]);
@@ -109,11 +107,6 @@ export default function SchemeEditorModal({
       }
     }
 
-    const gatewayMetric = draft.dhcp ? null : parseOptionalNumber(gatewayMetricText);
-    if (gatewayMetric === undefined) {
-      setFormError("网关跃点数只能是数字");
-      return;
-    }
     const metric = parseOptionalNumber(metricText);
     if (metric === undefined) {
       setFormError("接口跃点数只能是数字");
@@ -150,7 +143,6 @@ export default function SchemeEditorModal({
       matchAdapterName: draft.matchAdapterName?.trim() ? draft.matchAdapterName.trim() : null,
       addresses: draft.dhcp ? [] : addresses,
       gateway: draft.dhcp ? null : gateway,
-      gatewayMetric: draft.dhcp ? null : gatewayMetric,
       dnsMode: draft.dnsMode,
       dns: draft.dnsMode === "static" ? dns : [],
       metric,
@@ -326,7 +318,7 @@ export default function SchemeEditorModal({
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="默认网关">
             <Input
               value={draft.gateway ?? ""}
@@ -335,17 +327,6 @@ export default function SchemeEditorModal({
               disabled={draft.dhcp}
               placeholder="192.168.1.1"
               onChange={(event) => patch({ gateway: event.target.value })}
-            />
-          </Field>
-          <Field label="网关跃点数">
-            <Input
-              value={gatewayMetricText}
-              aria-label="网关跃点数"
-              className="mono"
-              inputMode="numeric"
-              disabled={draft.dhcp}
-              placeholder="留空为自动"
-              onChange={(event) => setGatewayMetricText(event.target.value)}
             />
           </Field>
           <Field label="接口跃点数">

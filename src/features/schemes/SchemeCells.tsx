@@ -58,7 +58,6 @@ export function SchemeMatchCell({ scheme, adapter, hostname }: MatchProps) {
 
 /** DHCP or IP/mask list, gateway, DNS and metrics in one compact cell. */
 export function SchemeSummaryCell({ scheme }: { scheme: Scheme }) {
-  const gatewayMetric = scheme.gatewayMetric === null ? "" : `（跃点 ${scheme.gatewayMetric}）`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <span className="cell-mono">
@@ -71,7 +70,6 @@ export function SchemeSummaryCell({ scheme }: { scheme: Scheme }) {
       {!scheme.dhcp ? (
         <span className="cell-mono">
           网关：{scheme.gateway ? scheme.gateway : "无"}
-          {gatewayMetric}
         </span>
       ) : null}
       <span className="cell-mono">

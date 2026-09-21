@@ -203,7 +203,6 @@ pub fn capture_current_scheme(adapter_id: String, name: String) -> AppResult<Sch
         dhcp: request.dhcp,
         addresses: request.addresses,
         gateway: request.gateway,
-        gateway_metric: request.gateway_metric,
         dns_mode: request.dns_mode,
         dns: request.dns,
         metric: request.metric,
@@ -241,7 +240,6 @@ fn request_from_scheme(scheme: &Scheme, adapter_id: &str) -> ApplyRequest {
         dhcp: scheme.dhcp,
         addresses: scheme.addresses.clone(),
         gateway: scheme.gateway.clone(),
-        gateway_metric: scheme.gateway_metric,
         dns_mode: scheme.dns_mode,
         dns: scheme.dns.clone(),
         metric: scheme.metric,
@@ -347,18 +345,6 @@ pub fn set_portable_mode(enabled: bool) -> AppResult<AppSettings> {
 #[tauri::command]
 pub fn get_identity() -> IdentityInfo {
     identity::info()
-}
-
-#[tauri::command]
-pub fn set_computer_name(name: String) -> AppResult<IdentityInfo> {
-    identity::set_computer_name(&name)?;
-    Ok(identity::info())
-}
-
-#[tauri::command]
-pub fn set_workgroup(name: String) -> AppResult<IdentityInfo> {
-    identity::set_workgroup(&name)?;
-    Ok(identity::info())
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +635,6 @@ pub fn _headless_selftest() -> serde_json::Value {
             mask: "255.255.255.0".to_string(),
         }],
         gateway: Some("10.9.9.1".to_string()),
-        gateway_metric: None,
         dns_mode: DnsMode::Static,
         dns: vec!["9.9.9.9".to_string()],
         metric: None,

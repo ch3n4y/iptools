@@ -31,7 +31,7 @@
 配置：`plan_apply`、`apply_config`、`capture_backup`、`restore_backup`、`derive_gateway`、`default_mask_for`
 方案：`list_schemes`、`save_scheme`、`delete_scheme`、`reorder_schemes`、`capture_current_scheme`、`plan_scheme`、`apply_scheme`、`import_schemes`、`import_schemes_text`、`merge_schemes`、`export_schemes`、`schemes_location`
 设置：`get_settings`、`save_settings`、`set_portable_mode`
-身份：`get_identity`、`set_computer_name`、`set_workgroup`
+身份：`get_identity`
 工具箱：`calculate_subnet`、`expand_ping_targets`、`default_scan_spec`、`start_ping`、`cancel_ping`、`running_ping_jobs`、`export_ping_csv`
 应用：`app_status`、`is_elevated`、`relaunch_as_admin`、`open_network_connections`、`open_app_location`、`check_update`、`install_update`
 
@@ -48,7 +48,6 @@
     { "address": "10.10.10.10", "prefix": 24, "mask": "255.255.255.0" }
   ],
   "gateway": "192.168.77.1",
-  "gatewayMetric": null,
   "dnsMode": "static",
   "dns": ["1.1.1.1", "8.8.8.8"],
   "metric": 20,
@@ -71,7 +70,7 @@
 { "version": 1, "schemes": [ { "id": "...", "name": "办公室", "tags": ["常用"],
   "matchMac": "AA-BB-CC-DD-EE-FF", "matchHostname": "DESKTOP", "matchAdapterName": "以太网",
   "dhcp": false, "addresses": [{ "address": "10.0.0.9", "prefix": 24, "mask": "255.255.255.0" }],
-  "gateway": "10.0.0.1", "gatewayMetric": null, "dnsMode": "static", "dns": ["1.1.1.1"],
+  "gateway": "10.0.0.1", "dnsMode": "static", "dns": ["1.1.1.1"],
   "metric": null, "note": "", "createdAtMs": 0, "updatedAtMs": 0 } ] }
 ```
 
@@ -92,7 +91,6 @@ CSV / TSV / Excel 表头（大小写不敏感，支持中英文别名）：
 | `masks` | 掩码、子网掩码、mask、prefix | 支持 `24`、`/24`、`255.255.255.0`，与 addresses 一一对应 |
 | `ip2`/`mask2`、`ip3`/`mask3` | 地址2/掩码2、地址3/掩码3 | 手工表格的便捷列（导出时不写） |
 | `gateway` | 网关、默认网关 | |
-| `gatewayMetric` | 网关跃点 | 数字 |
 | `dnsMode` | DNS模式 | `static` / `dhcp`；留空时按是否有 DNS 判断 |
 | `dns` | DNS服务器 | 多个用分隔符 |
 | `metric` | 跃点、接口跃点数 | 数字 |
@@ -113,7 +111,6 @@ CSV / TSV / Excel 表头（大小写不敏感，支持中英文别名）：
 | --- | --- |
 | `--dump-adapters [--out f]` | 网卡 JSON（含 `elevated`、`deviceMapSize`） |
 | `--dump-config [--out f]` | 设置 / 方案 / 身份 / 默认扫描段 |
-| `--dump-devices [--out f]` | SetupAPI 枚举诊断（设备表、实例 ID 样例） |
 | `--selftest [--out f]` | 只读自检：提权、网卡枚举、配置目录、方案往返、子网计算、目标展开 |
 | `--check-update [--out f]` | 调用 Tauri updater 检查 `latest.json` |
 | `--capture-backup --adapter <GUID> [--out f]` | 导出当前配置备份（`AdapterBackup`） |

@@ -1,24 +1,16 @@
-//! Machine identity: computer name, workgroup/domain and MAC address changes.
+//! Machine identity: hostname/workgroup read-back (read-only) and MAC address changes.
 
 use std::thread::sleep;
 use std::time::Duration;
 
 use windows::core::PCWSTR;
 use windows::Win32::NetworkManagement::NetManagement::{
-    NetApiBufferFree, NetGetJoinInformation, NetJoinDomain, NETSETUP_JOIN_DOMAIN,
-    NETSETUP_JOIN_STATUS, NetSetupDomainName,
-};
-use windows::Win32::System::SystemInformation::{
-    SetComputerNameExW, ComputerNamePhysicalDnsHostname, ComputerNamePhysicalNetBIOS,
+    NetApiBufferFree, NetGetJoinInformation, NETSETUP_JOIN_STATUS, NetSetupDomainName,
 };
 
 use crate::dto::{AdapterInfo, IdentityInfo};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::net::{adapters, device, elevation, parse_mac_bytes, registry};
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(std::iter::once(0)).collect()
-}
 
 fn join_state() -> (Option<String>, bool) {
     unsafe {
@@ -64,67 +56,6 @@ pub fn info() -> IdentityInfo {
         part_of_domain,
         reboot_required,
     }
-}
-
-fn validate_netbios_name(name: &str) -> AppResult<()> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() || trimmed.len() > 15 {
-        return Err(AppError::invalid(
-            "计算机名长度必须在 1-15 个字符之间（NetBIOS 限制）",
-        ));
-    }
-    if !trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
-        return Err(AppError::invalid("计算机名只能包含字母、数字和连字符"));
-    }
-    if trimmed.chars().all(|c| c.is_ascii_digit()) {
-        return Err(AppError::invalid("计算机名不能全部由数字组成"));
-    }
-    Ok(())
-}
-
-pub fn set_computer_name(name: &str) -> AppResult<()> {
-    elevation::require_elevation("修改计算机名")?;
-    validate_netbios_name(name)?;
-    let value = wide(name.trim());
-    unsafe {
-        SetComputerNameExW(ComputerNamePhysicalDnsHostname, PCWSTR(value.as_ptr())).map_err(
-            |err| {
-                AppError::new(ErrorCode::CommandFailed, "修改计算机名失败")
-                    .detail(err.to_string())
-            },
-        )?;
-        // The NetBIOS name is truncated to 15 characters; ignore failures there.
-        let _ = SetComputerNameExW(ComputerNamePhysicalNetBIOS, PCWSTR(value.as_ptr()));
-    }
-    Ok(())
-}
-
-pub fn set_workgroup(name: &str) -> AppResult<()> {
-    elevation::require_elevation("修改工作组")?;
-    let trimmed = name.trim();
-    if trimmed.is_empty() || trimmed.len() > 15 {
-        return Err(AppError::invalid("工作组名称长度必须在 1-15 个字符之间"));
-    }
-    let value = wide(trimmed);
-    let code = unsafe {
-        NetJoinDomain(
-            PCWSTR::null(),
-            PCWSTR(value.as_ptr()),
-            PCWSTR::null(),
-            PCWSTR::null(),
-            PCWSTR::null(),
-            NETSETUP_JOIN_DOMAIN,
-        )
-    };
-    if code != 0 {
-        return Err(AppError::new(ErrorCode::CommandFailed, "修改工作组失败")
-            .detail(format!("NetJoinDomain 返回 {code}"))
-            .hint("请确认工作组名称正确，且当前账户具备相应权限"));
-    }
-    Ok(())
 }
 
 pub fn validate_mac(mac: &str) -> AppResult<[u8; 6]> {

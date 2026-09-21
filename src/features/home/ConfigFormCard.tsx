@@ -278,7 +278,7 @@ export default function ConfigFormCard({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(180px, 1fr) 160px auto",
+          gridTemplateColumns: "minmax(180px, 1fr) auto",
           gap: 12,
           alignItems: "start",
         }}
@@ -307,29 +307,6 @@ export default function ConfigFormCard({
             onBlur={() => onFieldBlur("gateway")}
           />
           <FieldError id="home-gateway-error" message={errors["gateway"]} />
-        </div>
-        <div className="kv">
-          <label className="kv__label" htmlFor="home-gateway-metric">
-            网关跃点（留空 = 自动）
-          </label>
-          <InputNumber<number>
-            id="home-gateway-metric"
-            style={{ ...MONO_INPUT, width: "100%" }}
-            min={0}
-            max={9999}
-            precision={0}
-            placeholder="自动"
-            value={form.gatewayMetric}
-            disabled={addressesDisabled}
-            status={errors["gatewayMetric"] ? "error" : undefined}
-            aria-invalid={errors["gatewayMetric"] ? true : undefined}
-            aria-describedby={errors["gatewayMetric"] ? "home-gateway-metric-error" : undefined}
-            onChange={(value) =>
-              onPatch({ gatewayMetric: typeof value === "number" ? value : null })
-            }
-            onBlur={() => onFieldBlur("gatewayMetric")}
-          />
-          <FieldError id="home-gateway-metric-error" message={errors["gatewayMetric"]} />
         </div>
         <div style={actionColumn}>
           <Button

@@ -28,7 +28,6 @@ export interface HomeForm {
   mode: "dhcp" | "static";
   addresses: AddressRowState[];
   gateway: string;
-  gatewayMetric: number | null;
   dnsMode: DnsMode;
   dns: string[];
   metric: number | null;
@@ -47,7 +46,6 @@ export function blankForm(): HomeForm {
     mode: "dhcp",
     addresses: [blankRow()],
     gateway: "",
-    gatewayMetric: null,
     dnsMode: "dhcp",
     dns: emptyDns(),
     metric: null,
@@ -69,7 +67,6 @@ export function formFromAdapter(adapter: AdapterInfo): HomeForm {
     mode: adapter.dhcpEnabled ? "dhcp" : "static",
     addresses: rows.length > 0 ? rows : [blankRow()],
     gateway: adapter.ipv4.gateway ?? "",
-    gatewayMetric: adapter.ipv4.gatewayMetric,
     dnsMode: adapter.dns.source === "static" ? "static" : "dhcp",
     dns,
     metric: adapter.metric,
@@ -119,9 +116,6 @@ export function validateForm(form: HomeForm): Record<string, string> {
     if (gateway && !isValidIpv4(gateway)) {
       issues["gateway"] = "默认网关格式不正确（示例：192.168.1.1）";
     }
-    if (form.gatewayMetric !== null && !isMetricValue(form.gatewayMetric)) {
-      issues["gatewayMetric"] = `网关跃点应为 0 - ${MAX_METRIC} 之间的整数`;
-    }
   }
 
   if (form.dnsMode === "static") {
@@ -160,7 +154,6 @@ export function buildRequest(adapterId: string, form: HomeForm): ApplyRequest {
     dhcp: form.mode === "dhcp",
     addresses,
     gateway: form.mode === "static" && form.gateway.trim() ? form.gateway.trim() : null,
-    gatewayMetric: form.mode === "static" ? form.gatewayMetric : null,
     dnsMode: form.dnsMode,
     dns: form.dnsMode === "static" ? form.dns.map((server) => server.trim()).filter(Boolean) : [],
     metric: form.metric,

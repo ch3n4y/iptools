@@ -233,7 +233,6 @@ pub fn enumerate() -> AppResult<Vec<RawAdapter>> {
                         ipv4: Ipv4View {
                             addresses,
                             gateway,
-                            gateway_metric: None,
                         },
                         dns: DnsView {
                             servers: dns_servers,
@@ -288,7 +287,6 @@ pub fn enumerate() -> AppResult<Vec<RawAdapter>> {
                 ipv4: Ipv4View {
                     addresses: Vec::new(),
                     gateway: None,
-                    gateway_metric: None,
                 },
                 dns: DnsView {
                     servers: Vec::new(),

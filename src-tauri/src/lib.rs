@@ -13,10 +13,9 @@ use std::io::Write;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-const HEADLESS_FLAGS: [&str; 11] = [
+const HEADLESS_FLAGS: [&str; 10] = [
     "--dump-adapters",
     "--dump-config",
-    "--dump-devices",
     "--capture-backup",
     "--apply-config",
     "--restore-backup",
@@ -94,10 +93,6 @@ fn run_headless(flag: &str, args: &[String]) {
         "--selftest" => {
             let report = commands::_headless_selftest();
             emit_result(&report.to_string(), out.as_deref());
-        }
-        "--dump-devices" => {
-            let payload = serde_json::json!({ "ok": true, "device": net::device::diagnose() });
-            emit_result(&payload.to_string(), out.as_deref());
         }
         "--capture-backup" => {
             let payload = match flag_value(args, "--adapter") {
@@ -261,8 +256,6 @@ fn run_gui() {
             commands::save_settings,
             commands::set_portable_mode,
             commands::get_identity,
-            commands::set_computer_name,
-            commands::set_workgroup,
             commands::calculate_subnet,
             commands::expand_ping_targets,
             commands::default_scan_spec,

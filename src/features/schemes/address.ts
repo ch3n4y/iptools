@@ -89,7 +89,6 @@ export function blankScheme(): Scheme {
     dhcp: true,
     addresses: [],
     gateway: null,
-    gatewayMetric: null,
     dnsMode: "dhcp",
     dns: [],
     metric: null,

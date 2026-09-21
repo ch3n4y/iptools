@@ -34,7 +34,6 @@ const adapter: AdapterInfo = {
       { address: "10.30.1.238", prefix: 22, mask: "255.255.252.0", origin: "manual" },
     ],
     gateway: "10.30.0.11",
-    gatewayMetric: null,
   },
   dns: { servers: ["119.29.29.29", "223.5.5.5"], source: "static" },
   deviceInstanceId: null,
@@ -133,7 +132,6 @@ describe("home form model", () => {
     expect(request.dhcp).toBe(true);
     expect(request.addresses).toEqual([]);
     expect(request.gateway).toBeNull();
-    expect(request.gatewayMetric).toBeNull();
     expect(request.dns).toEqual([]);
   });
 

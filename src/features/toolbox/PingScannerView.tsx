@@ -3,6 +3,7 @@ import {
   Alert,
   App as AntApp,
   Button,
+  Collapse,
   Input,
   InputNumber,
   Segmented,
@@ -50,7 +51,6 @@ const FALLBACK_DEFAULTS: PingDefaults = {
   mode: "arp",
   concurrency: 64,
   timeoutMs: 1000,
-  retries: 1,
   slow: false,
   prefix: 24,
   multipass: true,
@@ -356,7 +356,6 @@ export default function PingScannerView() {
         mode: params.mode,
         concurrency: params.concurrency,
         timeoutMs: params.timeoutMs,
-        retries: params.retries,
         slow: params.slow,
         localIp: adapterRef.current?.ipv4.addresses[0]?.address ?? null,
         multipass: params.multipass,
@@ -484,7 +483,7 @@ export default function PingScannerView() {
         <div>
           <h1 className="page-head__title">网络扫描</h1>
           <p className="page-head__desc">
-            批量扫描 C 段主机的在线状态与 MAC 地址，支持 ARP / ICMP / 系统 ping 与多连发重试。
+            批量扫描网段内主机的在线状态与 MAC 地址，支持 ARP / ICMP / 系统 ping，并可在快速与慢速之间切换。
           </p>
         </div>
         <div className="page-head__actions">
@@ -516,7 +515,7 @@ export default function PingScannerView() {
 
       <SectionCard
         title="扫描目标"
-        hint={`支持单个地址、逗号或空格分隔、192.168.1.0/24 网段、192.168.1.10-20 范围；单次最多 4096 个地址。默认前缀 /${params.prefix}。`}
+        hint="支持单个地址、逗号或空格分隔、192.168.1.0/24 网段、192.168.1.10-20 范围；单次最多 4096 个地址。"
         extra={
           <Space>
             <Button onClick={onUseAdapterSegment} disabled={running || busy}>
@@ -576,10 +575,7 @@ export default function PingScannerView() {
         </Space>
       </SectionCard>
 
-      <SectionCard
-        title="扫描参数"
-        hint="参数会随设置一起保存，下次打开时沿用。"
-      >
+      <SectionCard title="扫描参数" hint="参数会随设置一起保存，下次打开时沿用。">
         <div className="kv-grid">
           <div className="kv">
             <span className="kv__label" id="ping-mode-label">
@@ -596,24 +592,6 @@ export default function PingScannerView() {
               ARP 推荐：可发现不响应 ICMP 的主机；ICMP 需要目标允许回显请求；系统 ping 调用
               Windows ping.exe。
             </Typography.Text>
-          </div>
-          <div className="kv">
-            <label className="kv__label" htmlFor="ping-concurrency">
-              并发数（1-256）
-            </label>
-            <InputNumber
-              id="ping-concurrency"
-              min={1}
-              max={256}
-              step={1}
-              value={params.concurrency}
-              disabled={running}
-              onChange={(value) => {
-                if (typeof value === "number") updateParams({ concurrency: value });
-              }}
-              aria-label="并发数"
-              style={{ width: 180 }}
-            />
           </div>
           <div className="kv">
             <label className="kv__label" htmlFor="ping-timeout">
@@ -634,71 +612,91 @@ export default function PingScannerView() {
             />
           </div>
           <div className="kv">
-            <label className="kv__label" htmlFor="ping-retries">
-              探测重试次数（0-5）
-            </label>
-            <InputNumber
-              id="ping-retries"
-              min={0}
-              max={5}
-              step={1}
-              value={params.retries}
+            <span className="kv__label" id="ping-speed-label">
+              速度
+            </span>
+            <Segmented<"fast" | "slow">
+              options={[
+                { label: "快速", value: "fast" },
+                { label: "慢速", value: "slow" },
+              ]}
+              value={params.slow ? "slow" : "fast"}
               disabled={running}
-              onChange={(value) => {
-                if (typeof value === "number") updateParams({ retries: value });
-              }}
-              aria-label="探测重试次数"
-              style={{ width: 180 }}
+              aria-labelledby="ping-speed-label"
+              onChange={(value) => updateParams({ slow: value === "slow" })}
             />
-          </div>
-          <div className="kv">
-            <label className="kv__label" htmlFor="ping-multipass">
-              多连发
-            </label>
-            <Space size={10}>
-              <Switch
-                id="ping-multipass"
-                checked={params.multipass}
-                disabled={running}
-                onChange={(checked) => updateParams({ multipass: checked })}
-                aria-label="多连发开关"
-              />
-              <InputNumber
-                min={1}
-                max={10}
-                step={1}
-                value={params.multipassRounds}
-                disabled={running || !params.multipass}
-                onChange={(value) => {
-                  if (typeof value === "number") updateParams({ multipassRounds: value });
-                }}
-                aria-label="多连发轮次"
-                addonAfter="轮"
-                style={{ width: 140 }}
-              />
-            </Space>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              多连发会重复探测并合并最快/最慢延时，用于发现不稳定的设备。
+              快速＝按并发数同时发包，地址之间不额外等待；慢速＝每个地址的多轮探测之间插入约
+              350 毫秒延时，减轻对老旧或探测频率受限设备的冲击，耗时明显更长。
             </Typography.Text>
           </div>
-          <div className="kv">
-            <label className="kv__label" htmlFor="ping-slow">
-              慢速模式
-            </label>
-            <Space size={10}>
-              <Switch
-                id="ping-slow"
-                checked={params.slow}
-                disabled={running}
-                onChange={(checked) => updateParams({ slow: checked })}
-                aria-label="慢速模式开关"
-              />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                针对限制 ICMP/ARP 频率的设备，逐台间隔发送。
-              </Typography.Text>
-            </Space>
-          </div>
         </div>
+
+        <Collapse
+          ghost
+          style={{ marginTop: 8 }}
+          items={[
+            {
+              key: "advanced",
+              label: "高级参数",
+              children: (
+                <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                  <div className="kv">
+                    <label className="kv__label" htmlFor="ping-concurrency">
+                      并发数（1-256）
+                    </label>
+                    <InputNumber
+                      id="ping-concurrency"
+                      min={1}
+                      max={256}
+                      step={1}
+                      value={params.concurrency}
+                      disabled={running}
+                      onChange={(value) => {
+                        if (typeof value === "number") updateParams({ concurrency: value });
+                      }}
+                      aria-label="并发数"
+                      style={{ width: 180 }}
+                    />
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      同时处于探测中的地址数量；机器性能或网络设备受限时可以调低。
+                    </Typography.Text>
+                  </div>
+                  <div className="kv">
+                    <label className="kv__label" htmlFor="ping-multipass">
+                      多连发
+                    </label>
+                    <Space size={10}>
+                      <Switch
+                        id="ping-multipass"
+                        checked={params.multipass}
+                        disabled={running}
+                        onChange={(checked) => updateParams({ multipass: checked })}
+                        aria-label="多连发开关"
+                      />
+                      <InputNumber
+                        min={1}
+                        max={10}
+                        step={1}
+                        value={params.multipassRounds}
+                        disabled={running || !params.multipass}
+                        onChange={(value) => {
+                          if (typeof value === "number") updateParams({ multipassRounds: value });
+                        }}
+                        aria-label="多连发轮次"
+                        addonAfter="轮"
+                        style={{ width: 140 }}
+                      />
+                    </Space>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      对每个地址重复探测并合并最快 / 最慢延时与丢包数，用于发现不稳定的设备。
+                    </Typography.Text>
+                  </div>
+                </Space>
+              ),
+            },
+          ]}
+        />
       </SectionCard>
 
       <SectionCard

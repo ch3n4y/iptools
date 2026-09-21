@@ -24,7 +24,6 @@ export interface AddressEntry {
 export interface Ipv4View {
   addresses: AddressEntry[];
   gateway: string | null;
-  gatewayMetric: number | null;
 }
 
 export interface DnsView {
@@ -59,7 +58,6 @@ export interface ApplyRequest {
   dhcp: boolean;
   addresses: AddressSpec[];
   gateway: string | null;
-  gatewayMetric: number | null;
   dnsMode: DnsMode;
   dns: string[];
   metric: number | null;
@@ -96,7 +94,6 @@ export interface AdapterBackup {
   dhcp: boolean;
   addresses: AddressSpec[];
   gateway: string | null;
-  gatewayMetric: number | null;
   dnsMode: DnsMode;
   dns: string[];
   metric: number | null;
@@ -124,7 +121,6 @@ export interface Scheme {
   dhcp: boolean;
   addresses: AddressSpec[];
   gateway: string | null;
-  gatewayMetric: number | null;
   dnsMode: DnsMode;
   dns: string[];
   metric: number | null;
@@ -143,7 +139,6 @@ export interface PingDefaults {
   mode: PingMode;
   concurrency: number;
   timeoutMs: number;
-  retries: number;
   slow: boolean;
   prefix: number;
   multipass: boolean;
@@ -204,7 +199,6 @@ export interface PingRequest {
   mode: PingMode;
   concurrency: number;
   timeoutMs: number;
-  retries: number;
   slow: boolean;
   localIp: string | null;
   multipass: boolean;

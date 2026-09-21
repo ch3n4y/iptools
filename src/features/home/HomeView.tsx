@@ -19,6 +19,8 @@ import AdapterList from "./AdapterList";
 import ApplyResultPanel from "./ApplyResultPanel";
 import BackupCard from "./BackupCard";
 import ConfigFormCard from "./ConfigFormCard";
+import MacCard from "./MacCard";
+import TechDetailsCard from "./TechDetailsCard";
 import {
   MAX_ADDRESS_ROWS,
   blankForm,
@@ -524,6 +526,8 @@ export default function HomeView() {
         </SectionCard>
       )}
 
+      {selectedAdapter ? <MacCard adapter={selectedAdapter} disabled={busy} /> : null}
+
       {selectedAdapter ? (
         <ConfigFormCard
           adapter={selectedAdapter}
@@ -558,6 +562,8 @@ export default function HomeView() {
         disabled={busy}
         onRestore={handleRestore}
       />
+
+      {selectedAdapter ? <TechDetailsCard adapter={selectedAdapter} /> : null}
 
       <ConfirmApplyDialog
         open={planOpen}

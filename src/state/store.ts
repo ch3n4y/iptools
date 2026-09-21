@@ -17,69 +17,33 @@ import type {
   ThemeMode,
 } from "../lib/types";
 
-export type ViewKey =
-  | "home"
-  | "identity"
-  | "schemes"
-  | "advanced"
-  | "ping"
-  | "subnet"
-  | "settings"
-  | "help";
+export type ViewKey = "home" | "schemes" | "toolbox" | "settings" | "help";
 
-export const VIEW_META: Record<
-  ViewKey,
-  { label: string; group: string; desc: string }
-> = {
+export const VIEW_META: Record<ViewKey, { label: string; desc: string }> = {
   home: {
     label: "网卡配置",
-    group: "网卡",
-    desc: "查看并修改当前网卡的 IP / 掩码 / 网关 / DNS",
-  },
-  identity: {
-    label: "主机设置",
-    group: "网卡",
-    desc: "计算机名、工作组与网卡 MAC 地址设置",
+    desc: "选择网卡、查看当前配置，并修改 IP / 掩码 / 网关 / DNS / 跃点数与 MAC",
   },
   schemes: {
     label: "方案管理",
-    group: "配置",
-    desc: "保存、导入与一键应用常用网络方案",
+    desc: "把常用网络配置保存为方案，双击即可一键应用，支持 CSV / Excel / JSON 导入导出",
   },
-  advanced: {
-    label: "高级选项",
-    group: "配置",
-    desc: "单网卡多 IP、自动网关与子网类掩码",
-  },
-  ping: {
-    label: "网络扫描",
-    group: "工具",
-    desc: "批量扫描（原版 C 网群 Ping 器）：ARP / ICMP 探测与结果导出",
-  },
-  subnet: {
-    label: "掩码计算",
-    group: "工具",
-    desc: "子网掩码计算器：掩码、反掩码、网络与主机范围",
+  toolbox: {
+    label: "工具箱",
+    desc: "批量扫描在线主机与 MAC 地址，以及子网掩码、主机范围计算",
   },
   settings: {
     label: "偏好设置",
-    group: "应用",
-    desc: "主题、刷新频率、配置位置与自动更新设置",
+    desc: "主题、刷新频率、应用前确认、配置位置与自动更新",
   },
   help: {
     label: "使用帮助",
-    group: "应用",
     desc: "使用流程、功能说明与常见问题",
   },
 };
 
-export const NAV_GROUPS: Array<{ group: string; items: ViewKey[] }> = [
-  { group: "网卡", items: ["home", "identity"] },
-  { group: "配置", items: ["schemes", "advanced"] },
-  { group: "工具", items: ["ping", "subnet"] },
-  { group: "应用", items: ["settings", "help"] },
-];
-
+/** Left-rail order (single flat list keeps navigation predictable). */
+export const VIEW_ORDER: ViewKey[] = ["home", "schemes", "toolbox", "settings", "help"];
 export interface AppState {
   ready: boolean;
   status: AppStatus | null;

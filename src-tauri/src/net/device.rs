@@ -8,7 +8,7 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
     SetupDiCallClassInstaller, SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo,
     SetupDiGetClassDevsW, SetupDiGetDeviceInstanceIdW, SetupDiOpenDevRegKey,
     SetupDiSetClassInstallParamsW, DICS_DISABLE, DICS_ENABLE, DICS_FLAG_CONFIGSPECIFIC,
- DICS_FLAG_GLOBAL, DIF_PROPERTYCHANGE, DIGCF_ALLCLASSES, DIREG_DRV, GUID_DEVCLASS_NET, SETUP_DI_GET_CLASS_DEVS_FLAGS,
+    DICS_FLAG_GLOBAL, DIF_PROPERTYCHANGE, DIREG_DRV, GUID_DEVCLASS_NET, SETUP_DI_GET_CLASS_DEVS_FLAGS,
     SP_CLASSINSTALL_HEADER, SP_DEVINFO_DATA, SP_PROPCHANGE_PARAMS,
 };
 use windows::Win32::Foundation::ERROR_SUCCESS;
@@ -293,126 +293,6 @@ pub fn driver_value(guid: &str, value: &str) -> Option<String> {
     let _ = (guid, value, REG_SZ, REG_DWORD, win32_error);
     None
 }
-
-/// Diagnostics for the SetupAPI path (used by `--dump-devices`).
-/// Tries the enumeration variants so we can pick the one this system supports.
-pub fn diagnose() -> serde_json::Value {
-    use windows::Win32::Devices::DeviceAndDriverInstallation::{
-        DIGCF_PRESENT, GUID_DEVCLASS_NET,
-    };
-
-    let mut variants: Vec<serde_json::Value> = Vec::new();
-    let attempts: [(&str, Option<*const GUID>, u32); 4] = [
-        ("all-classes", None, DIGCF_ALLCLASSES.0),
-        ("class-no-present", Some(&GUID_DEVCLASS_NET), 0),
-        ("class-present", Some(&GUID_DEVCLASS_NET), DIGCF_PRESENT.0),
-        (
-            "class-present-allclasses",
-            Some(&GUID_DEVCLASS_NET),
-            DIGCF_PRESENT.0 | DIGCF_ALLCLASSES.0,
-        ),
-    ];
-
-    for (label, class_guid, flags) in attempts {
-        let mut report = serde_json::Map::new();
-        report.insert("variant".to_string(), serde_json::Value::from(label));
-        let opened = unsafe {
-            SetupDiGetClassDevsW(
-                class_guid,
-                PCWSTR::null(),
-                None,
-                windows::Win32::Devices::DeviceAndDriverInstallation::SETUP_DI_GET_CLASS_DEVS_FLAGS(flags),
-            )
-        };
-        // DeviceSet releases the info set on drop, so nothing leaks here.
-        let set = match opened.map(|handle| DeviceSet { handle }) {
-            Ok(set) => set,
-            Err(err) => {
-                report.insert(
-                    "handle".to_string(),
-                    serde_json::Value::String(format!("error: {err}")),
-                );
-                variants.push(serde_json::Value::Object(report));
-                continue;
-            }
-        };
-        unsafe {
-            let mut index = 0u32;
-            let mut enumerated = 0u32;
-            let mut with_net_cfg = 0u32;
-            let mut samples: Vec<String> = Vec::new();
-            let mut instance_samples: Vec<String> = Vec::new();
-            let mut key_error = String::new();
-            loop {
-                let mut data = SP_DEVINFO_DATA {
-                    cbSize: std::mem::size_of::<SP_DEVINFO_DATA>() as u32,
-                    ClassGuid: GUID::from_u128(0),
-                    DevInst: 0,
-                    Reserved: 0,
-                };
-                if SetupDiEnumDeviceInfo(set.handle, index, &mut data).is_err() {
-                    break;
-                }
-                index += 1;
-                enumerated += 1;
-                if enumerated > 3000 {
-                    break;
-                }
-                if instance_samples.len() < 3 {
-                    let mut buffer = [0u16; 512];
-                    if SetupDiGetDeviceInstanceIdW(set.handle, &data, Some(&mut buffer), None).is_ok() {
-                        let end = buffer.iter().position(|unit| *unit == 0).unwrap_or(buffer.len());
-                        instance_samples.push(String::from_utf16_lossy(&buffer[..end]));
-                    }
-                }
-                match SetupDiOpenDevRegKey(
-                    set.handle,
-                    &data,
-                    DICS_FLAG_GLOBAL.0,
-                    0,
-                    DIREG_DRV,
-                    KEY_READ.0,
-                ) {
-                    Ok(key) => {
-                        let id = read_reg_string(key, "NetCfgInstanceId");
-                        let _ = RegCloseKey(key);
-                        if let Some(id) = id {
-                            with_net_cfg += 1;
-                            if samples.len() < 3 {
-                                samples.push(id);
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        if key_error.is_empty() {
-                            key_error = err.to_string();
-                        }
-                    }
-                }
-            }
-            report.insert("enumerated".to_string(), serde_json::Value::from(enumerated));
-            report.insert(
-                "withNetCfgInstanceId".to_string(),
-                serde_json::Value::from(with_net_cfg),
-            );
-            report.insert("netCfgSamples".to_string(), serde_json::to_value(samples).unwrap_or_default());
-            report.insert(
-                "instanceIdSamples".to_string(),
-                serde_json::to_value(instance_samples).unwrap_or_default(),
-            );
-            if !key_error.is_empty() {
-                report.insert("keyError".to_string(), serde_json::Value::String(key_error));
-            }
-        }
-        variants.push(serde_json::Value::Object(report));
-    }
-
-    serde_json::json!({
-        "elevated": crate::net::elevation::is_elevated(),
-        "variants": variants,
-    })
-}
-
 
 /// Problem code reported by the configuration manager for a device node.
 fn devnode_status(devinst: u32) -> Option<windows::Win32::Devices::DeviceAndDriverInstallation::CM_PROB> {

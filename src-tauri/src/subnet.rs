@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(usable_host_count(31), 2);
         let (first, last) = host_range(ip, mask31);
         assert_eq!((format_ipv4(first), format_ipv4(last)), ("10.1.1.0".to_string(), "10.1.1.1".to_string()));
-        let mask32 = mask_from_prefix(32).unwrap();
+        let _mask32 = mask_from_prefix(32).unwrap();
         assert_eq!(usable_host_count(32), 1);
         assert_eq!(total_addresses(30), 4);
     }

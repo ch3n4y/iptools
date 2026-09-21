@@ -131,11 +131,6 @@ export default function AdapterDetailCard({ adapter, disabled }: Props) {
         />
         <Kv label="默认网关" mono value={adapter.ipv4.gateway ?? "自动 / 未设置"} />
         <Kv
-          label="网关跃点"
-          mono
-          value={adapter.ipv4.gatewayMetric === null ? "自动" : String(adapter.ipv4.gatewayMetric)}
-        />
-        <Kv
           label="IP 获取方式"
           value={adapter.dhcpEnabled ? "自动获取（DHCP）" : "手动设置（静态）"}
         />

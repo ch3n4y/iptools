@@ -318,7 +318,7 @@ pub fn normalize_mac(input: Option<&str>) -> Option<String> {
 // 导入 / 导出（CSV / TSV / Excel / JSON）
 // ---------------------------------------------------------------------------
 
-const CSV_COLUMNS: [(&str, &[&str]); 18] = [
+const CSV_COLUMNS: [(&str, &[&str]); 17] = [
     ("name", &["name", "名称", "方案名", "方案名称"]),
     ("tags", &["tags", "标签"]),
     ("matchMac", &["matchMac", "mac", "匹配MAC"]),
@@ -328,7 +328,6 @@ const CSV_COLUMNS: [(&str, &[&str]); 18] = [
     ("addresses", &["addresses", "地址", "IP地址", "ip"]),
     ("masks", &["masks", "掩码", "子网掩码", "mask", "prefix"]),
     ("gateway", &["gateway", "网关", "默认网关"]),
-    ("gatewayMetric", &["gatewayMetric", "网关跃点"]),
     ("dnsMode", &["dnsMode", "DNS模式"]),
     ("dns", &["dns", "DNS服务器"]),
     ("metric", &["metric", "跃点", "接口跃点数"]),
@@ -456,7 +455,6 @@ fn row_to_scheme(headers: &[String], row: &[String], row_number: usize) -> Resul
         dhcp,
         addresses,
         gateway: pick(row, headers, "gateway"),
-        gateway_metric: pick(row, headers, "gatewayMetric").and_then(|text| text.parse().ok()),
         dns_mode,
         dns: dns_servers,
         metric: pick(row, headers, "metric").and_then(|text| text.parse().ok()),
@@ -590,10 +588,6 @@ pub fn schemes_to_csv(schemes: &[Scheme]) -> String {
                 .collect::<Vec<String>>()
                 .join("|"),
             scheme.gateway.clone().unwrap_or_default(),
-            scheme
-                .gateway_metric
-                .map(|value| value.to_string())
-                .unwrap_or_default(),
             match scheme.dns_mode {
                 crate::dto::DnsMode::Dhcp => "dhcp".to_string(),
                 crate::dto::DnsMode::Static => "static".to_string(),
@@ -661,7 +655,6 @@ mod tests {
                 mask: "255.255.255.0".to_string(),
             }],
             gateway: Some("192.168.1.1".to_string()),
-            gateway_metric: None,
             dns_mode: DnsMode::Static,
             dns: vec!["8.8.8.8".to_string()],
             metric: None,
@@ -833,7 +826,6 @@ bad,10.0.0.2,999.999.0.0,false\n";
                 mask: "255.255.0.0".to_string(),
             },
         ];
-        scheme.gateway_metric = Some(5);
         scheme.dns = vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()];
         scheme.metric = Some(10);
         scheme.note = "备注".to_string();
@@ -851,7 +843,6 @@ bad,10.0.0.2,999.999.0.0,false\n";
         assert_eq!(round_tripped.tags, vec!["a".to_string(), "b".to_string()]);
         assert_eq!(round_tripped.dns, vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]);
         assert_eq!(round_tripped.metric, Some(10));
-        assert_eq!(round_tripped.gateway_metric, Some(5));
         assert_eq!(round_tripped.match_hostname.as_deref(), Some("DESKTOP"));
         assert_eq!(round_tripped.note, "备注");
     }
@@ -881,7 +872,6 @@ bad,10.0.0.2,999.999.0.0,false\n";
                 mode: crate::dto::PingMode::Arp,
                 concurrency: 0,
                 timeout_ms: 0,
-                retries: 0,
                 slow: false,
                 prefix: 99,
                 multipass: false,

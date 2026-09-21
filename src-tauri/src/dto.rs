@@ -59,7 +59,6 @@ pub struct AddressEntry {
 pub struct Ipv4View {
     pub addresses: Vec<AddressEntry>,
     pub gateway: Option<String>,
-    pub gateway_metric: Option<u32>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -121,8 +120,6 @@ pub struct ApplyRequest {
     #[serde(default)]
     pub gateway: Option<String>,
     #[serde(default)]
-    pub gateway_metric: Option<u32>,
-    #[serde(default)]
     pub dns_mode: DnsMode,
     #[serde(default)]
     pub dns: Vec<String>,
@@ -171,7 +168,6 @@ pub struct AdapterBackup {
     pub dhcp: bool,
     pub addresses: Vec<AddressSpec>,
     pub gateway: Option<String>,
-    pub gateway_metric: Option<u32>,
     pub dns_mode: DnsMode,
     pub dns: Vec<String>,
     pub metric: Option<u32>,
@@ -213,8 +209,6 @@ pub struct Scheme {
     pub addresses: Vec<AddressSpec>,
     #[serde(default)]
     pub gateway: Option<String>,
-    #[serde(default)]
-    pub gateway_metric: Option<u32>,
     #[serde(default)]
     pub dns_mode: DnsMode,
     #[serde(default)]
@@ -280,8 +274,6 @@ pub struct PingDefaults {
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u32,
     #[serde(default)]
-    pub retries: u32,
-    #[serde(default)]
     pub slow: bool,
     /// Default subnet prefix for the scanner, `/24` by default.
     #[serde(default = "default_prefix")]
@@ -302,7 +294,6 @@ impl Default for PingDefaults {
             mode: PingMode::Arp,
             concurrency: default_concurrency(),
             timeout_ms: default_timeout_ms(),
-            retries: 1,
             slow: false,
             prefix: 24,
             multipass: true,
@@ -412,8 +403,6 @@ pub struct PingRequest {
     pub concurrency: u32,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u32,
-    #[serde(default)]
-    pub retries: u32,
     #[serde(default)]
     pub slow: bool,
     #[serde(default)]

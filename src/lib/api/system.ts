@@ -7,16 +7,6 @@ export async function getIdentity(): Promise<IdentityInfo> {
   return call<IdentityInfo>("get_identity");
 }
 
-export async function setComputerName(name: string): Promise<IdentityInfo> {
-  if (!isNative()) throw desktopOnly("修改计算机名");
-  return call<IdentityInfo>("set_computer_name", { name });
-}
-
-export async function setWorkgroup(name: string): Promise<IdentityInfo> {
-  if (!isNative()) throw desktopOnly("修改工作组");
-  return call<IdentityInfo>("set_workgroup", { name });
-}
-
 export async function isElevated(): Promise<boolean> {
   if (!isNative()) return false;
   return call<boolean>("is_elevated");

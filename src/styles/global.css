@@ -125,12 +125,6 @@ body {
   overflow-y: auto;
 }
 
-.rail__group-title {
-  font-size: var(--fs-xs);
-  color: var(--text-faint);
-  padding: var(--space-3) var(--space-2) var(--space-1);
-  letter-spacing: 0.4px;
-}
 
 .rail__item {
   display: flex;
@@ -287,16 +281,6 @@ body {
 .empty-state { padding: var(--space-8) var(--space-4); text-align: center; color: var(--text-faint); }
 .empty-state__title { color: var(--text-soft); font-size: var(--fs-md); margin-bottom: var(--space-1); }
 
-.kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: var(--r-xs);
-  padding: 0 5px;
-  background: var(--surface-2);
-  color: var(--text-soft);
-}
 
 /* --- antd surface alignment ------------------------------------------- */
 .ant-layout, .ant-layout-content { background: transparent; }
