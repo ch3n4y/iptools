@@ -71,7 +71,7 @@ const FEATURES: Array<{ key: string; label: string; body: string }> = [
   {
     key: "mac",
     label: "MAC 地址修改",
-    body: "修改 MAC 会写入注册表 NetworkAddress 覆盖值并重启网卡，使其立即生效；「清除覆盖」即恢复硬件地址。随机生成规则：12 位十六进制，首字节最低位固定为 0（单播地址），同时置本地管理位（第二位为 1），避免与真实厂商的 OUI 冲突；不能使用全 0、全 FF 或组播地址。当前 MAC、永久 MAC 与覆盖值可在「选中网卡详情」中核对，修改 MAC 需要管理员权限。",
+    body: "修改 MAC 会写入注册表 NetworkAddress 覆盖值并重启网卡，使其立即生效；「清除覆盖」即恢复硬件地址。随机生成规则：12 位十六进制，首字节最低位固定为 0（单播地址），同时置本地管理位（第二位为 1），避免与真实厂商的 OUI 冲突；不能使用全 0、全 FF 或组播地址。入口在「网卡配置」页的「网卡 MAC 地址」卡片，当前 MAC、永久 MAC 与覆盖值可在同页的「选中网卡详情」中核对；修改 MAC 需要管理员权限。",
   },
   {
     key: "schemes",
@@ -110,6 +110,16 @@ const REMOVED: Array<{ key: string; label: string; body: string }> = [
     key: "portable",
     label: "便携模式开关",
     body: "已移除。改为自动识别：只要程序目录存在 portable.txt，配置就存到程序目录，否则使用 %APPDATA%\\iptools，不需要在界面里切换，也避免切换后要重启才能生效。当前生效的目录会在「偏好设置」的「配置位置」中显示。",
+  },
+  {
+    key: "advanced-page",
+    label: "「高级选项」页",
+    body: "已移除。该页原有的能力（多 IP 地址行、按子网推导网关、A / B / C 类默认掩码、保存为方案、恢复备份）现在都在「网卡配置」页，单独占一页只会让入口重复，因此整页删除。",
+  },
+  {
+    key: "identity-page",
+    label: "「主机设置」页",
+    body: "已移除。MAC 地址修改已并入「网卡配置」页的「网卡 MAC 地址」卡片，只读的诊断信息（主机名、工作组、MAC 等）移入同页的「技术详情」折叠卡，因此不再单独占一个页面。",
   },
 ];
 
@@ -181,7 +191,7 @@ export default function HelpView() {
         <div>
           <h1 className="page-head__title">使用帮助</h1>
           <p className="page-head__desc">
-            使用流程、功能说明与常见问题；左侧导航可在网卡配置 / 方案管理 / 工具箱 / 偏好设置之间切换。
+            使用流程、功能说明与常见问题；左侧导航可在网卡配置 / 方案管理 / 工具箱 / 偏好设置 / 使用帮助之间切换。
           </p>
         </div>
       </div>

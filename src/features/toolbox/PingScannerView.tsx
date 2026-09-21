@@ -92,6 +92,8 @@ export default function PingScannerView() {
   const settingsPing = useAppStore((state) => state.settings?.ping ?? null);
   const patchSettings = useAppStore((state) => state.patchSettings);
   const adapter = useAppStore(currentAdapter);
+  const pendingScanSpec = useAppStore((state) => state.pendingScanSpec);
+  const setPendingScanSpec = useAppStore((state) => state.setPendingScanSpec);
 
   // --- parameters (two-way synced with settings.ping) --------------------
   const [params, setParams] = useState<PingDefaults>(FALLBACK_DEFAULTS);
@@ -230,21 +232,17 @@ export default function PingScannerView() {
     };
   }, []);
 
-  // The subnet calculator (or another view) can pre-fill the target box.
+  // 掩码计算页把网段写进 store，本页挂载后读取并消费一次（不依赖挂载时序）。
   useEffect(() => {
-    const onScanSpec = (event: Event) => {
-      const detail = (event as CustomEvent<{ spec?: string }>).detail;
-      const next = detail?.spec?.trim();
-      if (!next) return;
-      setSpec(next);
-      setTargets([]);
-      setSpecErrors([]);
-      setExpandedSpec(null);
-      void message.info(`已载入扫描目标：${next}`);
-    };
-    window.addEventListener("iptools:scan-spec", onScanSpec);
-    return () => window.removeEventListener("iptools:scan-spec", onScanSpec);
-  }, [message]);
+    const next = pendingScanSpec?.trim();
+    if (!next) return;
+    setSpec(next);
+    setTargets([]);
+    setSpecErrors([]);
+    setExpandedSpec(null);
+    setPendingScanSpec(null);
+    void message.info(`已载入扫描目标：${next}`);
+  }, [pendingScanSpec, setPendingScanSpec, message]);
 
   const summary = useMemo(() => pingSummary(results), [results]);
 

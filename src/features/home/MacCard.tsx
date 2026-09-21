@@ -11,7 +11,7 @@ import {
   normalizeMacAddress,
   validateMacAddress,
   type MacCheck,
-} from "../identity/validation";
+} from "./macValidation";
 
 type FeedbackLevel = "success" | "info" | "warning" | "error";
 

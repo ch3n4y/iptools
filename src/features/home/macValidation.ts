@@ -1,43 +1,14 @@
 /**
- * Front-end mirrors of the Rust-side validation in
- * `src-tauri/src/net/identity.rs`. The UI rejects bad input before it ever
- * reaches the backend, with the same wording the backend would use.
+ * 前端侧的 MAC 地址校验，与后端 `src-tauri/src/net/identity.rs` 的
+ * `validate_mac` 保持一致（同样的措辞）：合法输入才允许发往后端。
  */
 
-const NAME_PATTERN = /^[A-Za-z0-9-]+$/;
-
-/** 1-15 characters, ASCII letters/digits/hyphen, never all digits. */
-export function validateComputerName(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "请输入计算机名";
-  if (trimmed.length > 15) {
-    return `计算机名长度必须在 1-15 个字符之间（NetBIOS 限制），当前 ${trimmed.length} 个字符`;
-  }
-  if (!NAME_PATTERN.test(trimmed)) {
-    const bad = Array.from(new Set(Array.from(trimmed).filter((ch) => !/^[A-Za-z0-9-]$/.test(ch))));
-    return `计算机名只能包含字母、数字和连字符，请去掉：${bad.join(" ")}`;
-  }
-  if (/^[0-9]+$/.test(trimmed)) return "计算机名不能全部由数字组成";
-  return null;
-}
-
-/** Same NetBIOS limits as the computer name, minus the "not all digits" rule. */
-export function validateWorkgroupName(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "请输入工作组名称";
-  if (trimmed.length > 15) {
-    return `工作组名称长度必须在 1-15 个字符之间（NetBIOS 限制），当前 ${trimmed.length} 个字符`;
-  }
-  if (!NAME_PATTERN.test(trimmed)) return "工作组名称只能包含字母、数字和连字符";
-  return null;
-}
-
 export interface MacCheck {
-  /** Blocking problem, or `null` when the address may be written. */
+  /** 阻塞性问题；为 `null` 时表示可以写入。 */
   error: string | null;
-  /** `AA-BB-CC-DD-EE-FF` form, ready to hand to the backend. */
+  /** `AA-BB-CC-DD-EE-FF` 形式，可直接交给后端。 */
   normalized: string;
-  /** Non-blocking note (e.g. the locally-administered bit is clear). */
+  /** 非阻塞提示（例如本地管理位为 0）。 */
   warning: string | null;
 }
 
@@ -45,14 +16,14 @@ export function compactMac(value: string): string {
   return value.replace(/[\s:.-]/g, "").toUpperCase();
 }
 
-/** `AABBCCDDEEFF` -> `AA-BB-CC-DD-EE-FF` (safe on partial input). */
+/** `AABBCCDDEEFF` -> `AA-BB-CC-DD-EE-FF`（输入不完整时也安全）。 */
 export function normalizeMacAddress(value: string): string {
   return compactMac(value).replace(/(.{2})(?=.)/g, "$1-");
 }
 
 /**
- * 12 hex digits, first byte's least-significant bit clear (unicast), and not
- * all-zero / all-FF. Matches `identity::validate_mac`.
+ * 12 位十六进制、第一字节最低位为 0（单播），且不能全 0 / 全 FF。
+ * 与后端 `identity::validate_mac` 对应。
  */
 export function validateMacAddress(value: string): MacCheck {
   const compact = compactMac(value);

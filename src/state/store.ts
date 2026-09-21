@@ -19,6 +19,9 @@ import type {
 
 export type ViewKey = "home" | "schemes" | "toolbox" | "settings" | "help";
 
+/** 工具箱内的两个工具页：网络扫描 / 掩码计算。 */
+export type ToolboxTool = "scan" | "mask";
+
 export const VIEW_META: Record<ViewKey, { label: string; desc: string }> = {
   home: {
     label: "网卡配置",
@@ -61,12 +64,18 @@ export interface AppState {
   schemes: Scheme[];
   schemesLoading: boolean;
   view: ViewKey;
+  /** 工具箱内的当前工具页（网络扫描 / 掩码计算）。 */
+  toolboxTool: ToolboxTool;
+  /** 掩码计算页交给扫描页的网段；扫描页消费一次后置空，避免重复覆盖用户输入。 */
+  pendingScanSpec: string | null;
 
   bootstrap: () => Promise<void>;
   refreshAdapters: (options?: { silent?: boolean }) => Promise<void>;
   refreshAdapter: (adapterId: string) => Promise<AdapterInfo | null>;
   selectAdapter: (adapterId: string) => void;
   setView: (view: ViewKey) => void;
+  setToolboxTool: (tool: ToolboxTool) => void;
+  setPendingScanSpec: (spec: string | null) => void;
   patchSettings: (patch: Partial<AppSettings>) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   refreshSchemes: () => Promise<void>;
@@ -102,6 +111,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   schemes: [],
   schemesLoading: false,
   view: "home",
+  toolboxTool: "scan",
+  pendingScanSpec: null,
 
   async bootstrap() {
     try {
@@ -186,6 +197,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setView(view) {
     set({ view });
+  },
+
+  setToolboxTool(toolboxTool) {
+    set({ toolboxTool });
+  },
+
+  setPendingScanSpec(pendingScanSpec) {
+    set({ pendingScanSpec });
   },
 
   async patchSettings(patch) {

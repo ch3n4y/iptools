@@ -13,10 +13,10 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
 };
 use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegQueryValueExW, HKEY, KEY_READ, REG_DWORD, REG_SZ, REG_VALUE_TYPE,
+    RegCloseKey, RegQueryValueExW, HKEY, KEY_READ, REG_VALUE_TYPE,
 };
 
-use crate::error::{win32_error, AppError, AppResult, ErrorCode};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::net::registry::CONFIGFLAG_DISABLED;
 
 #[derive(Debug, Clone, Default)]
@@ -288,11 +288,6 @@ fn set_enabled_setupapi(guid: &str, enable: bool) -> AppResult<()> {
     .detail(guid.to_string()))
 }
 
-/// Reads a driver-key value by NetCfg GUID (helper used for diagnostics).
-pub fn driver_value(guid: &str, value: &str) -> Option<String> {
-    let _ = (guid, value, REG_SZ, REG_DWORD, win32_error);
-    None
-}
 
 /// Problem code reported by the configuration manager for a device node.
 fn devnode_status(devinst: u32) -> Option<windows::Win32::Devices::DeviceAndDriverInstallation::CM_PROB> {

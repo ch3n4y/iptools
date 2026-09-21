@@ -525,9 +525,6 @@ export default function HomeView() {
           </Empty>
         </SectionCard>
       )}
-
-      {selectedAdapter ? <MacCard adapter={selectedAdapter} disabled={busy} /> : null}
-
       {selectedAdapter ? (
         <ConfigFormCard
           adapter={selectedAdapter}
@@ -554,6 +551,9 @@ export default function HomeView() {
           onToggleEnabled={handleToggleEnabled}
         />
       ) : null}
+
+      {/* MAC 属于低频、影响较大的操作，放在主要配置之后 */}
+      {selectedAdapter ? <MacCard adapter={selectedAdapter} disabled={busy} /> : null}
 
       <BackupCard
         backup={backup}

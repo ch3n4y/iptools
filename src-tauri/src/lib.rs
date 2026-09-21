@@ -254,7 +254,6 @@ fn run_gui() {
             commands::schemes_location,
             commands::get_settings,
             commands::save_settings,
-            commands::set_portable_mode,
             commands::get_identity,
             commands::calculate_subnet,
             commands::expand_ping_targets,

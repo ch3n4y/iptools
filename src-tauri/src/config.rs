@@ -69,22 +69,6 @@ pub fn schemes_path() -> PathBuf {
     config_dir().join(SCHEMES_FILE)
 }
 
-pub fn set_portable(enabled: bool) -> AppResult<()> {
-    let marker = portable_marker_path();
-    if enabled {
-        fs::write(&marker, "portable\r\n").map_err(|err| {
-            AppError::new(ErrorCode::IoError, "无法创建便携模式标记文件")
-                .detail(format!("{}：{err}", marker.display()))
-        })?;
-    } else if marker.exists() {
-        fs::remove_file(&marker).map_err(|err| {
-            AppError::new(ErrorCode::IoError, "无法删除便携模式标记文件")
-                .detail(format!("{}：{err}", marker.display()))
-        })?;
-    }
-    Ok(())
-}
-
 fn write_text_atomic(path: &Path, text: &str) -> AppResult<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

@@ -30,7 +30,7 @@
 网卡：`list_adapters`、`get_adapter`、`set_adapter_enabled`、`random_mac_address`、`change_mac`
 配置：`plan_apply`、`apply_config`、`capture_backup`、`restore_backup`、`derive_gateway`、`default_mask_for`
 方案：`list_schemes`、`save_scheme`、`delete_scheme`、`reorder_schemes`、`capture_current_scheme`、`plan_scheme`、`apply_scheme`、`import_schemes`、`import_schemes_text`、`merge_schemes`、`export_schemes`、`schemes_location`
-设置：`get_settings`、`save_settings`、`set_portable_mode`
+设置：`get_settings`、`save_settings`
 身份：`get_identity`
 工具箱：`calculate_subnet`、`expand_ping_targets`、`default_scan_spec`、`start_ping`、`cancel_ping`、`running_ping_jobs`、`export_ping_csv`
 应用：`app_status`、`is_elevated`、`relaunch_as_admin`、`open_network_connections`、`open_app_location`、`check_update`、`install_update`
@@ -116,6 +116,8 @@ CSV / TSV / Excel 表头（大小写不敏感，支持中英文别名）：
 | `--capture-backup --adapter <GUID> [--out f]` | 导出当前配置备份（`AdapterBackup`） |
 | `--apply-config --input r.json [--dry-run] [--out f]` | 生成计划（dry-run）或执行写入并返回 `ApplyResult` |
 | `--restore-backup --input b.json [--out f]` | 用备份文件恢复配置 |
+| `--set-adapter-enabled --adapter <GUID> [--disable] [--out f]` | 启用网卡（加 `--disable` 改为禁用）并等待状态生效；未提权返回 `NOT_ELEVATED` |
+| `--change-mac --adapter <GUID> --mac <地址>` / `--random` / `--clear` `[--out f]` | 写入 / 随机生成 / 清除网卡的 MAC 覆盖值（写注册表 `NetworkAddress` 并重启设备），返回 `requested` 与更新后的网卡信息 |
 | `--version` | 版本信息 |
 
 因为程序声明了 `requireAdministrator`，命令行模式同样需要提权（例如 `gsudo` 或管理员终端）。

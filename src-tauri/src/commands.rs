@@ -328,16 +328,6 @@ pub fn save_settings(settings: AppSettings) -> AppResult<AppSettings> {
     Ok(migrated)
 }
 
-#[tauri::command]
-pub fn set_portable_mode(enabled: bool) -> AppResult<AppSettings> {
-    config::set_portable(enabled)?;
-    let mut settings = config::load_settings();
-    settings.portable = enabled;
-    config::migrate_settings(settings.clone());
-    config::save_settings(&settings)?;
-    Ok(settings)
-}
-
 // ---------------------------------------------------------------------------
 // Machine identity
 // ---------------------------------------------------------------------------

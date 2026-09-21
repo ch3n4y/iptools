@@ -31,7 +31,7 @@ export default function ElevationBanner() {
         <div style={{ flex: 1 }}>
           <Typography.Text strong>当前没有管理员权限</Typography.Text>
           <div style={{ fontSize: 12, color: "var(--text-soft)" }}>
-            可以正常查看网卡信息；修改 IP / DNS、启用禁用网卡、改 MAC 与计算机名需要管理员权限。
+            可以正常查看网卡信息；修改 IP / DNS、启用禁用网卡、改 MAC 需要管理员权限。
             {error ? " 提权失败：" + errorSummary(error) : ""}
           </div>
         </div>

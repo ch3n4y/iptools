@@ -25,7 +25,7 @@
     "copyright": "© 2026 ch3n4y",
     "category": "Utility",
     "shortDescription": "Windows 网络配置工具",
-    "longDescription": "IP 地址修改器：查看并修改网卡 IP / 子网掩码 / 网关 / DNS / 跃点数，支持静态与 DHCP 切换、单网卡多 IP、网卡启用禁用、MAC 地址修改、计算机名与工作组修改、方案管理与工具箱（C 网群 Ping 器、子网掩码计算器）。",
+    "longDescription": "IP 地址修改器：查看并修改网卡 IP / 子网掩码 / 网关 / DNS / 接口跃点数，支持静态与 DHCP 切换、单网卡多 IP、网卡启用禁用、MAC 地址修改；方案管理与 CSV / Excel / JSON 导入导出；工具箱提供网段扫描与子网掩码计算。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

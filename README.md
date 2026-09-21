@@ -10,14 +10,11 @@ Windows 网络配置工具，用 **Tauri 2 + Rust** 与 **React 19 + TypeScript 
 
 | 模块 | 说明 |
 | --- | --- |
-| 网卡配置 | 网卡列表（名称 / 状态 / MAC / 序号 / IP 摘要）、详情、静态与 DHCP 切换、多 IP、网关、DNS、接口跃点数、启用禁用、MAC 修改；应用前弹出变更预览并二次确认 |
-| 主机设置 | 网卡 MAC 地址修改（含随机生成合法单播地址、清除覆盖）；主机名与工作组为只读信息 |
+| 网卡配置 | 网卡列表（名称 / 状态 / MAC / 序号 / IP 摘要）、详情、静态与 DHCP 切换、多 IP、网关、DNS、接口跃点数、启用禁用；「网卡 MAC 地址」卡片负责 MAC 修改（含随机生成合法单播地址、清除覆盖），只读诊断信息收在「技术详情」折叠卡；应用前弹出变更预览并二次确认 |
 | 方案管理 | 保存 / 编辑 / 重命名 / 排序 / 复制 / 删除方案；CSV、TSV、Excel(.xlsx) 与 JSON 导入导出；按 MAC 或计算机名匹配当前网卡的方案优先显示；双击列表行或点击「应用选中方案」即可写入 |
-| 高级选项 | 单网卡多 IP（最多 6 个地址）、按子网自动生成网关、A/B/C 类掩码快捷切换、配置校验、保存为方案、恢复备份、恢复为自动获取 |
-| 网络扫描 | 原版「C 网群 Ping 器」：ARP / ICMP / 系统 ping，并发、超时、多连发、慢速模式、延时着色、本机地址高亮、进度与取消、导出 CSV |
-| 掩码计算 | 原版「子网掩码计算器」：掩码 / 反掩码 / 网络地址 / 广播地址 / 主机范围，双击复制反掩码，可直接转入扫描 |
-| 偏好设置 | 主题（跟随系统 / 浅色 / 深色）、自动刷新、应用前确认、群 Ping 默认参数、配置位置与便携模式、自动更新 |
-| 使用帮助 | 使用流程、功能说明与常见问题（各功能通过左侧菜单切换） |
+| 工具箱 | 原版「C 网群 Ping 器」与「子网掩码计算器」合并为一页，页内用 Segmented 在「网络扫描」/「掩码计算」之间切换：ARP / ICMP / 系统 ping 扫描，并发、超时、多连发、慢速模式、延时着色、本机地址高亮、进度与取消、导出 CSV；掩码 / 反掩码 / 网络地址 / 广播地址 / 主机范围计算，双击复制反掩码，可直接转入扫描 |
+| 偏好设置 | 主题（跟随系统 / 浅色 / 深色）、自动刷新、应用前确认、群 Ping 默认参数、配置位置（自动识别 portable.txt）、自动更新 |
+| 使用帮助 | 使用流程、功能说明、已移除的功能与常见问题（各页面通过左侧菜单切换） |
 
 ## 构建与运行
 
@@ -54,6 +51,13 @@ pnpm tauri build      # 打包：NSIS 安装包 + 自动更新产物（.exe / .s
 "IP地址修改器.exe" --capture-backup --adapter "{网卡GUID}" --out backup.json
 "IP地址修改器.exe" --apply-config --input request.json --out result.json
 "IP地址修改器.exe" --restore-backup --input backup.json --out restore.json
+
+# 网卡启停与 MAC 覆盖（写入操作，需管理员权限）
+"IP地址修改器.exe" --set-adapter-enabled --adapter "{网卡GUID}" --out enabled.json
+"IP地址修改器.exe" --set-adapter-enabled --adapter "{网卡GUID}" --disable --out disabled.json
+"IP地址修改器.exe" --change-mac --adapter "{网卡GUID}" --mac AA-BB-CC-DD-EE-FF --out mac.json
+"IP地址修改器.exe" --change-mac --adapter "{网卡GUID}" --random --out mac-random.json
+"IP地址修改器.exe" --change-mac --adapter "{网卡GUID}" --clear --out mac-clear.json
 ```
 
 `--apply-config` 与 GUI 使用**同一条写入路径**（计划 → netsh 写入 → 读回校验 → 失败回滚）。请求 JSON 结构见 `docs/CONTRACT.md`。
@@ -61,7 +65,7 @@ pnpm tauri build      # 打包：NSIS 安装包 + 自动更新产物（.exe / .s
 ## 配置与数据
 
 - 默认位置：`%APPDATA%\iptools\`（`settings.json`、`schemes.json`）
-- 便携模式：程序目录存在 `portable.txt` 时，配置改存程序目录（设置页可切换）
+- 便携模式：程序目录存在 `portable.txt` 时自动把配置存到程序目录（无需界面开关，界面只显示当前生效的目录）
 - 不读取原版 `ip.dat`（如有个性化需求，可用 CSV/JSON 导入方案）
 
 ## 发版与自动更新
@@ -96,7 +100,7 @@ src/                     前端（React + TS + antd）
   lib/types.ts           与 Rust DTO 一一对应的类型
   state/store.ts         zustand 应用状态
   components/            标题栏、状态栏、确认对话框、结果横幅等共享件
-  features/              各页面：网卡配置 / 主机设置 / 方案管理 / 高级选项 / 网络扫描 / 掩码计算 / 偏好设置 / 使用帮助
+  features/              各页面（左侧菜单 5 项）：网卡配置 / 方案管理 / 工具箱（网络扫描 · 掩码计算）/ 偏好设置 / 使用帮助
   styles/tokens.css      语义化设计令牌（浅色与深色成对设计）
 src-tauri/src/
   net/                   Win32 与注册表：网卡枚举、设备启停、写入与校验
@@ -104,7 +108,7 @@ src-tauri/src/
   subnet.rs              子网计算与配置校验（含单元测试）
   config.rs              设置与方案持久化、CSV/Excel 导入导出
   commands.rs            Tauri 命令层
-docs/                    功能对照与接口契约
+docs/                    功能对照、接口契约与消融记录
 ```
 
 ## 命名约定

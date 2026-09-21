@@ -135,6 +135,8 @@ function CopyableValue({ text, label, onCopy }: CopyableValueProps) {
 export default function SubnetCalculatorView() {
   const { message } = AntApp.useApp();
   const setView = useAppStore((state) => state.setView);
+  const setToolboxTool = useAppStore((state) => state.setToolboxTool);
+  const setPendingScanSpec = useAppStore((state) => state.setPendingScanSpec);
 
   const [ipInput, setIpInput] = useState("");
   const [maskInput, setMaskInput] = useState("24");
@@ -244,12 +246,11 @@ export default function SubnetCalculatorView() {
   function onScanNetwork() {
     if (!calc) return;
     const spec = `${calc.network}/${calc.prefix}`;
-    // Switch first, then hand the range over on the next tick: the toolbox (and
-    // the scanner inside it) only subscribe once they are mounted.
+    // 扫描页由工具箱懒挂载，window 事件会在它挂载前就派发完、结果丢失；
+    // 因此把网段写进 store，扫描页挂载后自己读取并消费一次。
+    setPendingScanSpec(spec);
+    setToolboxTool("scan");
     setView("toolbox");
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("iptools:scan-spec", { detail: { spec } }));
-    }, 80);
     void message.success(`已把网段 ${spec} 交给网络扫描`);
   }
 
