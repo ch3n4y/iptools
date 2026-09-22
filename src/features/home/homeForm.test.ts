@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MASK_HINT } from "../../lib/ipv4";
 import type { AdapterInfo } from "../../lib/types";
 import {
   MAX_ADDRESS_ROWS,
@@ -86,8 +87,24 @@ describe("home form model", () => {
     );
     const messages = Object.values(issues);
     expect(messages.some((text) => text.includes("重复"))).toBe(true);
-    expect(messages.some((text) => text.includes("掩码应为"))).toBe(true);
+    expect(messages.some((text) => text.includes(MASK_HINT))).toBe(true);
     expect(messages.some((text) => text.includes("默认网关格式不正确"))).toBe(true);
+  });
+
+  it("rejects zero masks like the scheme page and the backend do", () => {
+    const issues = validateForm({
+      ...blankForm(),
+      mode: "static",
+      addresses: [{ ...blankRow(), address: "192.168.1.10", mask: "/0" }],
+    });
+    expect(Object.values(issues).some((text) => text.includes(MASK_HINT))).toBe(true);
+    expect(
+      validateForm({
+        ...blankForm(),
+        mode: "static",
+        addresses: [{ ...blankRow(), address: "192.168.1.10", mask: "0.0.0.0" }],
+      }),
+    ).not.toEqual({});
   });
 
   it("requires at least one DNS server when DNS is manual", () => {

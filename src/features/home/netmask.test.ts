@@ -29,9 +29,12 @@ describe("netmask helpers", () => {
     expect(parseMaskText("32")).toBe(32);
   });
 
-  it("rejects non-contiguous or malformed masks", () => {
+  it("rejects non-contiguous, zero and malformed masks", () => {
     expect(parseMaskText("255.0.255.0")).toBeNull();
-    expect(parseMaskText("0.0.0.0")).toBe(0);
+    // 零掩码以前在本页是合法的（算 /0），现已统一为"一律不可用"
+    expect(parseMaskText("0.0.0.0")).toBeNull();
+    expect(parseMaskText("/0")).toBeNull();
+    expect(parseMaskText("0")).toBeNull();
     expect(parseMaskText("33")).toBeNull();
     expect(parseMaskText("abc")).toBeNull();
     expect(parseMaskText("")).toBeNull();

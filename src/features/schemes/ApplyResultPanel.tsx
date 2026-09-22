@@ -1,5 +1,6 @@
 import { Tag, Typography } from "antd";
 import type { ApplyResult } from "../../lib/types";
+import { classifyApplyResult } from "../../lib/applyOutcome";
 
 export interface ResultSummary {
   level: "success" | "warning" | "error";
@@ -9,26 +10,29 @@ export interface ResultSummary {
 
 /** Banner summary: success / mismatches / steps / rollback in one line of text. */
 export function describeApplyResult(result: ApplyResult, action: string): ResultSummary {
-  const failed = result.steps.filter((step) => !step.ok);
+  const outcome = classifyApplyResult(result);
   const parts: string[] = [result.message];
   if (result.steps.length > 0) {
-    parts.push(`步骤 ${result.steps.length - failed.length}/${result.steps.length} 成功`);
+    parts.push(
+      `步骤 ${result.steps.length - outcome.failedSteps.length}/${result.steps.length} 成功`,
+    );
   }
-  if (failed.length > 0) {
-    parts.push(`失败步骤：${failed.map((step) => `${step.label}（${step.message}）`).join("、")}`);
+  if (outcome.failedSteps.length > 0) {
+    parts.push(
+      `失败步骤：${outcome.failedSteps.map((step) => `${step.label}（${step.message}）`).join("、")}`,
+    );
   }
   if (result.mismatches.length > 0) {
     parts.push(`读回不一致：${result.mismatches.join("、")}`);
   }
-  if (result.rollbackPerformed) {
+  if (outcome.rolledBack) {
     parts.push(`已自动回滚${result.rollbackMessage ? `：${result.rollbackMessage}` : ""}`);
   }
-  const level: ResultSummary["level"] = !result.success
-    ? "error"
-    : failed.length > 0 || result.mismatches.length > 0 || result.rollbackPerformed
-      ? "warning"
-      : "success";
-  return { level, title: `${action}${result.success ? "成功" : "失败"}`, message: parts.join("；") };
+  return {
+    level: outcome.level,
+    title: `${action}${result.success ? "成功" : "失败"}`,
+    message: parts.join("；"),
+  };
 }
 
 /** Read-only detail view of the last write: steps, verification and rollback. */

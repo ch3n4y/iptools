@@ -1,58 +1,27 @@
 /**
- * IPv4 mask / prefix helpers for the home view form.
+ * 网卡配置页的 IPv4 / 掩码助手。
  *
- * The backend treats `prefix` as the source of truth and re-derives the dotted
- * mask, so the form accepts both notations (`255.255.252.0` and `/22`) and
- * normalises them before submitting.
+ * 计算与规则都来自 `lib/ipv4.ts`（本模块只是本页的命名入口）：
+ * 1-32 的前缀、连续的掩码，`/0`、`0`、`0.0.0.0` 一律视为不可用——
+ * 与方案页、工具箱、浏览器预览以及 Rust 后端 `subnet::parse_mask_or_prefix` 一致。
+ *
+ * 后端以 `prefix` 为准并重新派生点分掩码，所以表单同时接受
+ * `255.255.252.0` 与 `/22` 两种写法，提交前归一化。
  */
-
-const OCTET = /^\d{1,3}$/;
+import { formatMaskFromPrefix, parseIpv4, parseMaskPrefix } from "../../lib/ipv4";
 
 export function isValidIpv4(text: string): boolean {
-  const parts = text.trim().split(".");
-  if (parts.length !== 4) return false;
-  return parts.every((part) => OCTET.test(part) && Number(part) <= 255);
+  return parseIpv4(text) !== null;
 }
 
 export function maskFromPrefix(prefix: number): string {
-  const safe = Math.min(32, Math.max(0, Math.trunc(prefix)));
-  const value = safe === 0 ? 0 : (0xffffffff << (32 - safe)) >>> 0;
-  return [
-    (value >>> 24) & 0xff,
-    (value >>> 16) & 0xff,
-    (value >>> 8) & 0xff,
-    value & 0xff,
-  ].join(".");
+  return formatMaskFromPrefix(prefix);
 }
 
 /**
- * Accepts `255.255.255.0`, `/22` and `22`. Returns `null` for anything that is
- * not a usable netmask (non-contiguous masks included).
+ * 接受 `255.255.255.0`、`/22` 与 `22`。返回 `null` 表示这不是可用掩码
+ * （不连续、越界或零掩码）。
  */
 export function parseMaskText(text: string): number | null {
-  const value = text.trim();
-  if (!value) return null;
-
-  const shortForm = /^\/?(\d{1,2})$/.exec(value);
-  if (shortForm) {
-    const prefix = Number(shortForm[1]);
-    return prefix <= 32 ? prefix : null;
-  }
-
-  if (!isValidIpv4(value)) return null;
-
-  let prefix = 0;
-  let seenZero = false;
-  for (const part of value.split(".")) {
-    const octet = Number(part);
-    for (let bit = 7; bit >= 0; bit -= 1) {
-      if ((octet >> bit) & 1) {
-        if (seenZero) return null; // e.g. 255.0.255.0 — not a valid mask
-        prefix += 1;
-      } else {
-        seenZero = true;
-      }
-    }
-  }
-  return prefix;
+  return parseMaskPrefix(text);
 }

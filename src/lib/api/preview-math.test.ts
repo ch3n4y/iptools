@@ -28,10 +28,17 @@ describe("browser-preview subnet math", () => {
     expect(calc.usableHostCount).toBe(2);
   });
 
-  it("works without an address and falls back to /24 for junk input", () => {
+  it("works without an address", () => {
     const calc = previewSubnet(null, "24");
     expect(calc.ip).toBeNull();
     expect(calc.prefix).toBe(24);
-    expect(previewSubnet("10.0.0.1", "255.0.255.0").prefix).toBe(24);
+    expect(calc.network).toBe("0.0.0.0");
+  });
+
+  it("rejects unusable masks instead of silently assuming /24", () => {
+    expect(() => previewSubnet("10.0.0.1", "255.0.255.0")).toThrow(/掩码格式不支持/);
+    expect(() => previewSubnet("10.0.0.1", "0")).toThrow(/掩码格式不支持/);
+    expect(() => previewSubnet("10.0.0.1", "0.0.0.0")).toThrow(/掩码格式不支持/);
+    expect(() => previewSubnet("10.0.0.1", "")).toThrow(/掩码格式不支持/);
   });
 });

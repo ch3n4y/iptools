@@ -4,6 +4,7 @@ import SectionCard from "../../components/SectionCard";
 import StatusBanner from "../../components/StatusBanner";
 import type { AppError } from "../../lib/errors";
 import { errorSummary } from "../../lib/errors";
+import { classifyApplyResult } from "../../lib/applyOutcome";
 import type { ApplyResult } from "../../lib/types";
 import type { CSSProperties } from "react";
 
@@ -24,6 +25,8 @@ export default function ApplyResultPanel({ result, error, onRetry, onRefresh }: 
     { label: "重新读取网卡状态", onClick: onRefresh },
   ];
 
+  // 结局定级与「方案管理」页共用同一条规则（见 lib/applyOutcome.ts）
+  const outcome = result ? classifyApplyResult(result) : null;
   const banner = error ? (
     <StatusBanner
       level="error"
@@ -32,18 +35,18 @@ export default function ApplyResultPanel({ result, error, onRetry, onRefresh }: 
       error={error}
       actions={actions}
     />
-  ) : result && result.success && result.verified ? (
+  ) : result && outcome?.level === "success" ? (
     <StatusBanner
       level="success"
       title="配置已生效并通过读回校验"
       message={result.message}
       actions={[{ label: "重新读取网卡状态", onClick: onRefresh }]}
     />
-  ) : result && !result.success ? (
+  ) : result && outcome?.level === "error" ? (
     <StatusBanner
       level="error"
       title={
-        result.rollbackPerformed
+        outcome.rolledBack
           ? "写入失败，已回滚到修改前的配置"
           : "写入失败"
       }
@@ -53,7 +56,11 @@ export default function ApplyResultPanel({ result, error, onRetry, onRefresh }: 
   ) : result ? (
     <StatusBanner
       level="warning"
-      title="配置已写入，但读回校验存在差异"
+      title={
+        outcome?.rolledBack
+          ? "配置已写入，但过程中执行过回滚"
+          : "配置已写入，但读回校验存在差异"
+      }
       message={result.message}
       actions={actions}
     />

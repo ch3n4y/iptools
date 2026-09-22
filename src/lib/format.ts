@@ -1,3 +1,4 @@
+import { formatIpv4, isPrivateIpv4, networkAddress } from "./ipv4";
 import type { AdapterStatus, PingResult } from "./types";
 
 export const STATUS_LABEL: Record<AdapterStatus, string> = {
@@ -7,14 +8,6 @@ export const STATUS_LABEL: Record<AdapterStatus, string> = {
   faulty: "设备异常",
   unknown: "未知",
 };
-
-export const STATUS_ORDER: AdapterStatus[] = [
-  "connected",
-  "disconnected",
-  "disabled",
-  "faulty",
-  "unknown",
-];
 
 export function formatSpeed(bps: number): string {
   if (!Number.isFinite(bps) || bps <= 0) return "—";
@@ -107,23 +100,22 @@ export function pingResultsToCsv(results: PingResult[]): string {
     .join("\r\n");
 }
 
-export function hostOfAdapter(address: string, prefix: number): string {
+/**
+ * 宽松解析：历史行为是按八位组 `parseInt`、非数字当 0（不是严格校验）。
+ * 这里保留该行为，只把网络地址与私网判定交给 `lib/ipv4.ts`。
+ */
+function lenientIpv4Value(address: string): number {
   const octets = address.split(".").map((value) => Number.parseInt(value, 10) || 0);
-  const value =
-    ((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
-  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
-  const network = (value & mask) >>> 0;
-  return [
-    (network >>> 24) & 0xff,
-    (network >>> 16) & 0xff,
-    (network >>> 8) & 0xff,
-    network & 0xff,
-  ].join(".");
+  return ((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
+}
+
+export function hostOfAdapter(address: string, prefix: number): string {
+  return formatIpv4(networkAddress(lenientIpv4Value(address), prefix));
 }
 
 export function isPrivateIp(address: string): boolean {
   const parts = address.split(".").map((value) => Number.parseInt(value, 10));
   if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return false;
-  const [a, b] = parts;
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  const value = (((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3]) >>> 0;
+  return isPrivateIpv4(value);
 }

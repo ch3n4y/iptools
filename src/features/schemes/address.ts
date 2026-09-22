@@ -1,8 +1,11 @@
 /**
- * Shared address helpers for the scheme manager and the advanced page.
- * Kept free of React so both views can reuse the exact same parsing rules as the
- * Rust backend (`subnet::parse_mask_or_prefix`).
+ * 方案管理页的地址与掩码助手。
+ *
+ * 掩码/地址计算统一在 `lib/ipv4.ts`（以前这里有一份独立实现）。本模块只声明
+ * **本页的掩码策略**：前缀必须 ≥ 1，即 `0`、`/0`、`0.0.0.0` 都视为不可用。
+ * 与 Rust 后端 `subnet::parse_mask_or_prefix` 的规则保持一致。
  */
+import { formatMaskFromPrefix, parseIpv4, parseMaskPrefix } from "../../lib/ipv4";
 import type { AddressSpec, Scheme } from "../../lib/types";
 
 export interface MaskParse {
@@ -10,49 +13,26 @@ export interface MaskParse {
   mask: string;
 }
 
+
+/** 掩码文本 -> `{prefix, mask}`；不可用时返回 `null`（规则见 lib/ipv4.ts）。 */
+
 /** Dotted mask text for a prefix length, e.g. `24` -> `255.255.255.0`. */
 export function maskFromPrefix(prefix: number): string {
-  const clamped = Math.min(32, Math.max(0, Math.trunc(prefix)));
-  const value = clamped === 0 ? 0 : (0xffffffff << (32 - clamped)) >>> 0;
-  return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff].join(
-    ".",
-  );
+  return formatMaskFromPrefix(prefix);
 }
 
 export function ipv4ToNumber(text: string): number | null {
-  const parts = text.trim().split(".");
-  if (parts.length !== 4) return null;
-  let value = 0;
-  for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const octet = Number.parseInt(part, 10);
-    if (octet > 255) return null;
-    value = (value << 8) | octet;
-  }
-  return value >>> 0;
+  return parseIpv4(text);
 }
 
 export function isValidIpv4(text: string): boolean {
-  return ipv4ToNumber(text) !== null;
+  return parseIpv4(text) !== null;
 }
 
 /** Accepts `24`, `/24` or a dotted mask. Returns null for anything unusable. */
 export function parseMaskInput(text: string): MaskParse | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const digits = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-  if (/^\d{1,2}$/.test(digits)) {
-    const prefix = Number.parseInt(digits, 10);
-    if (prefix < 1 || prefix > 32) return null;
-    return { prefix, mask: maskFromPrefix(prefix) };
-  }
-  const value = ipv4ToNumber(trimmed);
-  if (value === null) return null;
-  const inverted = ~value >>> 0;
-  // A valid mask has a contiguous run of ones: inverted must be 2^n - 1.
-  if (((inverted & (inverted + 1)) >>> 0) !== 0) return null;
-  const prefix = value === 0 ? 0 : value.toString(2).split("").filter((bit) => bit === "1").length;
-  if (prefix < 1 || prefix > 32) return null;
+  const prefix = parseMaskPrefix(text);
+  if (prefix === null) return null;
   return { prefix, mask: maskFromPrefix(prefix) };
 }
 

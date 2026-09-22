@@ -6,6 +6,7 @@
  */
 import type { AdapterInfo, AddressSpec, ApplyRequest, DnsMode } from "../../lib/types";
 import { isValidIpv4, maskFromPrefix, parseMaskText } from "./netmask";
+import { MASK_HINT } from "../../lib/ipv4";
 
 export const MAX_ADDRESS_ROWS = 4;
 export const MAX_DNS_SERVERS = 3;
@@ -102,7 +103,7 @@ export function validateForm(form: HomeForm): Record<string, string> {
       if (!mask) {
         issues[`mask:${row.key}`] = "请填写子网掩码";
       } else if (parseMaskText(mask) === null) {
-        issues[`mask:${row.key}`] = "掩码应为 255.255.255.0 或 /24 形式，且必须是连续掩码";
+        issues[`mask:${row.key}`] = `子网掩码格式不正确：${MASK_HINT}`;
       }
     }
 

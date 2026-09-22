@@ -19,6 +19,7 @@ import { calculateSubnet } from "../../lib/api/toolbox";
 import { errorSummary, toAppError, type AppError } from "../../lib/errors";
 import { isPrivateIp } from "../../lib/format";
 import type { SubnetCalc } from "../../lib/types";
+import { MASK_HINT, parseIpv4, parseMaskPrefix } from "../../lib/ipv4";
 import { useAppStore } from "../../state/store";
 
 type CalcState = "idle" | "running" | "done" | "failed";
@@ -53,47 +54,6 @@ const STATE_COLOR: Record<CalcState, string> = {
 
 const DEBOUNCE_MS = 200;
 
-function ipv4ToNumber(value: string): number | null {
-  const parts = value.trim().split(".");
-  if (parts.length !== 4) return null;
-  let result = 0;
-  for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const octet = Number.parseInt(part, 10);
-    if (octet > 255) return null;
-    result = result * 256 + octet;
-  }
-  return result;
-}
-
-/** Accepts `24`, `/24` or a dotted-quad mask; returns the prefix length. */
-function prefixFromMaskText(text: string): number | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("/")) {
-    const digits = trimmed.slice(1).trim();
-    if (!/^\d{1,2}$/.test(digits)) return null;
-    const prefix = Number.parseInt(digits, 10);
-    return prefix >= 1 && prefix <= 32 ? prefix : null;
-  }
-  if (/^\d{1,2}$/.test(trimmed)) {
-    const prefix = Number.parseInt(trimmed, 10);
-    return prefix >= 1 && prefix <= 32 ? prefix : null;
-  }
-  const mask = ipv4ToNumber(trimmed);
-  if (mask === null) return null;
-  let ones = 0;
-  let seenZero = false;
-  for (let bit = 31; bit >= 0; bit -= 1) {
-    if (((mask >>> bit) & 1) === 1) {
-      if (seenZero) return null; // non-contiguous mask
-      ones += 1;
-    } else {
-      seenZero = true;
-    }
-  }
-  return ones >= 1 && ones <= 32 ? ones : null;
-}
 
 function classOfIp(value: string): IpClass | null {
   const first = Number.parseInt(value.trim().split(".")[0] ?? "", 10);
@@ -149,16 +109,16 @@ export default function SubnetCalculatorView() {
   const lastPrefixRef = useRef(24);
   const copiedTimerRef = useRef<number | null>(null);
 
-  const ipError = ipInput.trim() !== "" && ipv4ToNumber(ipInput) === null
+  const ipError = ipInput.trim() !== "" && parseIpv4(ipInput) === null
     ? "IP 地址格式不正确，应形如 192.168.1.10"
     : null;
 
-  const maskPrefix = prefixFromMaskText(maskInput);
+  const maskPrefix = parseMaskPrefix(maskInput);
   let maskError: string | null = null;
   if (maskInput.trim() === "") {
     maskError = "请填写掩码，例如 24、/24 或 255.255.255.0";
   } else if (maskPrefix === null) {
-    maskError = "掩码格式不支持：请输入 1-32 的前缀（如 /24）或连续的掩码（如 255.255.254.0）";
+    maskError = `掩码格式不支持：${MASK_HINT}`;
   }
 
   useEffect(() => {
