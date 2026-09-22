@@ -1,6 +1,5 @@
 import { Button, Space, Typography } from "antd";
-import { UndoOutlined } from "@ant-design/icons";
-import SectionCard from "../../components/SectionCard";
+import { SaveOutlined, UndoOutlined } from "@ant-design/icons";
 import { errorSummary, type AppError } from "../../lib/errors";
 import { formatTimestamp } from "../../lib/format";
 import type { AdapterBackup } from "../../lib/types";
@@ -10,6 +9,7 @@ interface Props {
   backupAt: number | null;
   backupError: AppError | null;
   disabled: boolean;
+  onCapture: () => void;
   onRestore: () => void;
 }
 
@@ -18,57 +18,47 @@ function describeBackup(backup: AdapterBackup): string {
     backup.addresses.length > 0
       ? backup.addresses.map((entry) => `${entry.address}/${entry.prefix}`).join("、")
       : "无 IP 地址";
-  const gateway = backup.gateway ?? "无网关";
   const dns = backup.dns.length > 0 ? backup.dns.join("、") : "无 DNS";
-  return `${backup.dhcp ? "自动获取（DHCP）" : "手动设置"} · ${address} · 网关 ${gateway} · DNS ${dns}`;
+  return `${backup.dhcp ? "自动获取（DHCP）" : "手动设置"} · ${address} · 网关 ${backup.gateway ?? "无"} · DNS ${dns}`;
 }
 
-/** Safety net: the snapshot captured immediately before a write. */
-export default function BackupCard({
+/**
+ * 底部的备份/恢复条：两个按钮 + 一行状态。
+ * 「应用配置」前会自动备份，这里的「备份当前配置」用于手动留一份快照。
+ */
+export default function BackupBar({
   backup,
   backupAt,
   backupError,
   disabled,
+  onCapture,
   onRestore,
 }: Props) {
   return (
-    <SectionCard
-      title="备份与恢复"
-      hint="应用前自动保存修改前的配置快照"
-      extra={
-        <Button
-          icon={<UndoOutlined />}
-          disabled={disabled || !backup}
-          onClick={onRestore}
-        >
+    <Space direction="vertical" size={4} style={{ width: "100%", marginTop: 4 }}>
+      <Space size={8} wrap>
+        <Button icon={<SaveOutlined />} disabled={disabled} onClick={onCapture}>
+          备份当前配置
+        </Button>
+        <Button icon={<UndoOutlined />} disabled={disabled || !backup} onClick={onRestore}>
           恢复备份
         </Button>
-      }
-    >
+        <Typography.Text type="secondary" style={{ fontSize: "var(--fs-xs)" }}>
+          {backup
+            ? `已备份：${backup.adapterName} · ${formatTimestamp(backupAt ?? 0)}`
+            : "尚未保存备份快照（每次「应用配置」前会自动备份）"}
+        </Typography.Text>
+      </Space>
       {backup ? (
-        <Space direction="vertical" size={4} style={{ width: "100%" }}>
-          <Typography.Text role="status">
-            已备份修改前配置：{backup.adapterName} · {formatTimestamp(backupAt ?? 0)}
-          </Typography.Text>
-          <Typography.Text type="secondary" className="mono" style={{ fontSize: "var(--fs-xs)" }}>
-            {describeBackup(backup)}
-          </Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: "var(--fs-xs)" }}>
-            「恢复备份」会按该快照重新写入地址、网关与 DNS，属于写操作，需要二次确认。
-          </Typography.Text>
-        </Space>
-      ) : (
-        <Space direction="vertical" size={4} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">
-            尚未保存备份快照。点击「应用配置」并确认后，程序会在写入前自动备份修改前的配置。
-          </Typography.Text>
-          {backupError ? (
-            <Typography.Text type="warning" style={{ fontSize: "var(--fs-xs)" }}>
-              上次备份未成功：{errorSummary(backupError)}
-            </Typography.Text>
-          ) : null}
-        </Space>
-      )}
-    </SectionCard>
+        <Typography.Text type="secondary" className="mono" style={{ fontSize: "var(--fs-xs)" }}>
+          {describeBackup(backup)}
+        </Typography.Text>
+      ) : null}
+      {backupError ? (
+        <Typography.Text type="warning" style={{ fontSize: "var(--fs-xs)" }}>
+          上次备份未成功：{errorSummary(backupError)}
+        </Typography.Text>
+      ) : null}
+    </Space>
   );
 }

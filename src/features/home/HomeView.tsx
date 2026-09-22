@@ -14,13 +14,12 @@ import type {
   ApplyResult,
 } from "../../lib/types";
 import { useAppStore } from "../../state/store";
-import AdapterDetailCard from "./AdapterDetailCard";
-import AdapterList from "./AdapterList";
+import AdapterSelect from "./AdapterSelect";
 import ApplyResultPanel from "./ApplyResultPanel";
-import BackupCard from "./BackupCard";
+import BackupBar from "./BackupCard";
 import ConfigFormCard from "./ConfigFormCard";
+import ConfigSummaryCard from "./ConfigSummaryCard";
 import MacCard from "./MacCard";
-import TechDetailsCard from "./TechDetailsCard";
 import {
   MAX_ADDRESS_ROWS,
   blankForm,
@@ -101,6 +100,7 @@ export default function HomeView() {
 
   const [form, setForm] = useState<HomeForm>(blankForm);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [plan, setPlan] = useState<ApplyPlan | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -114,6 +114,11 @@ export default function HomeView() {
   const [backupAt, setBackupAt] = useState<number | null>(null);
   const [backupError, setBackupError] = useState<AppError | null>(null);
   const lastFilledRef = useRef<string | null>(null);
+
+  // 写入成功后回到只读视图：用户接下来要看的是刚写入的结果
+  useEffect(() => {
+    if (result?.success) setEditing(false);
+  }, [result]);
 
   const selectedAdapter = useMemo(
     () => adapters.find((adapter) => adapter.id === selectedAdapterId) ?? null,
@@ -504,7 +509,7 @@ export default function HomeView() {
         onRefresh={handleRefreshState}
       />
 
-      <AdapterList
+      <AdapterSelect
         adapters={adapters}
         selectedAdapterId={selectedAdapterId}
         loading={adaptersState === "loading"}
@@ -515,9 +520,49 @@ export default function HomeView() {
       />
 
       {selectedAdapter ? (
-        <AdapterDetailCard adapter={selectedAdapter} disabled={busy} />
+        editing ? (
+          <>
+            <Space style={{ marginBottom: 8 }}>
+              <Button onClick={() => setEditing(false)}>退出编辑</Button>
+              <Typography.Text type="secondary" style={{ fontSize: "var(--fs-sm)" }}>
+                编辑中：改完点「应用配置」写入系统；退出编辑不会丢失已填内容
+              </Typography.Text>
+            </Space>
+            <ConfigFormCard
+              adapter={selectedAdapter}
+              form={form}
+              errors={displayedErrors}
+              disabled={busy}
+              onPatch={patchForm}
+              onAddressPatch={patchAddress}
+              onAddressAdd={addAddress}
+              onAddressRemove={removeAddress}
+              onFieldBlur={handleFieldBlur}
+              onDefaultMask={(key) => {
+                void handleDefaultMask(key);
+              }}
+              onDeriveGateway={() => {
+                void handleDeriveGateway();
+              }}
+              onReadCurrent={() => {
+                void handleReadCurrent();
+              }}
+              onApply={() => {
+                void handleApply();
+              }}
+              onToggleEnabled={handleToggleEnabled}
+            />
+          </>
+        ) : (
+          <ConfigSummaryCard
+            adapter={selectedAdapter}
+            form={form}
+            disabled={busy}
+            onEdit={() => setEditing(true)}
+          />
+        )
       ) : (
-        <SectionCard title="选中网卡详情">
+        <SectionCard title="IP 配置">
           <Empty description="尚未选择网卡">
             <Button disabled={busy} onClick={() => selectAdapter(adapters[0].id)}>
               选择第一张网卡
@@ -525,45 +570,29 @@ export default function HomeView() {
           </Empty>
         </SectionCard>
       )}
-      {selectedAdapter ? (
-        <ConfigFormCard
-          adapter={selectedAdapter}
-          form={form}
-          errors={displayedErrors}
-          disabled={busy}
-          onPatch={patchForm}
-          onAddressPatch={patchAddress}
-          onAddressAdd={addAddress}
-          onAddressRemove={removeAddress}
-          onFieldBlur={handleFieldBlur}
-          onDefaultMask={(key) => {
-            void handleDefaultMask(key);
-          }}
-          onDeriveGateway={() => {
-            void handleDeriveGateway();
-          }}
-          onReadCurrent={() => {
-            void handleReadCurrent();
-          }}
-          onApply={() => {
-            void handleApply();
-          }}
-          onToggleEnabled={handleToggleEnabled}
-        />
-      ) : null}
 
-      {/* MAC 属于低频、影响较大的操作，放在主要配置之后 */}
       {selectedAdapter ? <MacCard adapter={selectedAdapter} disabled={busy} /> : null}
 
-      <BackupCard
+      <BackupBar
         backup={backup}
         backupAt={backupAt}
         backupError={backupError}
         disabled={busy}
+        onCapture={() => {
+          if (!selectedAdapter) return;
+          void (async () => {
+            try {
+              const snapshot = await adaptersApi.captureBackup(selectedAdapter.id);
+              setBackup(snapshot);
+              setBackupAt(Date.now());
+              setBackupError(null);
+            } catch (error) {
+              setBackupError(toAppError(error));
+            }
+          })();
+        }}
         onRestore={handleRestore}
       />
-
-      {selectedAdapter ? <TechDetailsCard adapter={selectedAdapter} /> : null}
 
       <ConfirmApplyDialog
         open={planOpen}
