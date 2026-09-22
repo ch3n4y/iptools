@@ -1,5 +1,6 @@
 import { Collapse, Space, Tag, Typography } from "antd";
 import SectionCard from "../../components/SectionCard";
+import { MAX_ADDRESS_ROWS } from "../home/homeForm";
 
 const FLOW_STEPS: Array<{ step: string; text: string }> = [
   {
@@ -12,7 +13,7 @@ const FLOW_STEPS: Array<{ step: string; text: string }> = [
   },
   {
     step: "3. 填写目标配置",
-    text: "在「IP 配置」中选择「自动获取（DHCP）」或「手动设置（静态）」：静态模式下填写地址与掩码（双击「子网掩码」标签可一键填入 A / B / C 类默认掩码），需要多个地址时点「添加地址」（最多 6 个），还可以设置默认网关、接口跃点数与 DNS。",
+    text: `在「IP 配置」中选择「自动获取（DHCP）」或「手动设置（静态）」：静态模式下填写地址与掩码（双击「子网掩码」标签可一键填入 A / B / C 类默认掩码），需要多个地址时点「添加地址」（最多 ${MAX_ADDRESS_ROWS} 个），还可以设置默认网关、接口跃点数与 DNS。`,
   },
   {
     step: "4. 应用配置",
@@ -41,7 +42,7 @@ const FEATURES: Array<{ key: string; label: string; body: string }> = [
   {
     key: "multi-ip",
     label: "单网卡多 IP",
-    body: "「IP 配置」中可以为同一块网卡添加多行 IPv4 地址与对应掩码（最多 6 个），用于同时接入多个网段（例如设备调试网段与管理网段共存）。",
+    body: `「IP 配置」中可以为同一块网卡添加多行 IPv4 地址与对应掩码（最多 ${MAX_ADDRESS_ROWS} 个），用于同时接入多个网段（例如设备调试网段与管理网段共存）。`,
   },
   {
     key: "gateway",
