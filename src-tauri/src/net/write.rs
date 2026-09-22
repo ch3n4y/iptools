@@ -71,6 +71,36 @@ fn adapter_arg(name: &str) -> String {
     format!("name=\"{name}\"")
 }
 
+/// `interface="<name>"`：`delete route` 与 `set interface` 用这个名字（不是 `name=`）。
+fn interface_arg(name: &str) -> String {
+    format!("interface=\"{name}\"")
+}
+
+/// `netsh interface ipv4 <verb> <noun> name="<adapter>" <extras...>`
+fn netsh_by_name(adapter_name: &str, verb: &str, noun: &str, extras: &[String]) -> Action {
+    let mut args: Vec<String> = vec![
+        "interface".to_string(),
+        "ipv4".to_string(),
+        verb.to_string(),
+        noun.to_string(),
+        adapter_arg(adapter_name),
+    ];
+    args.extend_from_slice(extras);
+    Action::Netsh(args)
+}
+
+/// `netsh interface ipv4 <verb> <noun> <params...>`：适配器名直接写在参数里的场合。
+fn netsh_raw(verb: &str, noun: &str, params: &[String]) -> Action {
+    let mut args: Vec<String> = vec![
+        "interface".to_string(),
+        "ipv4".to_string(),
+        verb.to_string(),
+        noun.to_string(),
+    ];
+    args.extend_from_slice(params);
+    Action::Netsh(args)
+}
+
 /// `netsh` returns a non-zero exit code for "DHCP is already enabled", which is
 /// a harmless no-op rather than a failure.
 fn is_benign_dhcp_message(output: &str) -> bool {
@@ -89,6 +119,29 @@ struct Step {
     name: String,
     label: String,
     action: Action,
+    /// 执行失败时按"跳过（无需清理）"处理，而不是让整次写入失败。
+    best_effort: bool,
+}
+
+impl Step {
+    fn new(name: impl Into<String>, label: impl Into<String>, action: Action) -> Self {
+        Self {
+            name: name.into(),
+            label: label.into(),
+            action,
+            best_effort: false,
+        }
+    }
+
+    /// 尽力而为的步骤：目标可能已经不存在（例如旧的默认路由），失败可容忍。
+    fn best_effort(name: impl Into<String>, label: impl Into<String>, action: Action) -> Self {
+        Self {
+            name: name.into(),
+            label: label.into(),
+            action,
+            best_effort: true,
+        }
+    }
 }
 
 fn value_or_none(value: Option<&str>) -> String {
@@ -99,12 +152,11 @@ fn value_or_none(value: Option<&str>) -> String {
         .to_string()
 }
 
-/// Deletes manually configured addresses that are about to become stale.
+/// 删除即将失效的手动地址。
 ///
-/// Windows 10 keeps the DHCP flag on some adapters (notably Wi-Fi profiles)
-/// even after a static address is configured, and `netsh ... source=dhcp`
-/// refuses to run while that flag is set — so the write path removes manual
-/// addresses explicitly instead of relying on the mode switch alone.
+/// Windows 10 会在某些网卡（尤其是 Wi-Fi 配置文件）上保留 DHCP 标志，
+/// 即使已经配了静态地址；此时 `netsh ... source=dhcp` 会拒绝执行，
+/// 所以写入路径显式移除手动地址，而不是只依赖模式切换。
 fn cleanup_steps(adapter_name: &str, before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
     before
         .ipv4
@@ -113,114 +165,129 @@ fn cleanup_steps(adapter_name: &str, before: &AdapterInfo, request: &ApplyReques
         .filter(|entry| entry.origin == "manual")
         .filter(|entry| subnet::parse_ipv4(&entry.address).is_some())
         .filter(|entry| {
-            // An address that exactly matches a requested address/prefix is
-            // re-written, not removed; everything else has to go.
+            // 与请求完全一致的地址会被重写而不是删除，其余都必须清掉。
             request.dhcp
                 || !request.addresses.iter().any(|spec| {
                     spec.address.trim().eq_ignore_ascii_case(&entry.address)
                         && spec.prefix == entry.prefix
                 })
         })
-        .map(|entry| Step {
-            name: format!("delete-address-{}", entry.address),
-            label: format!("移除旧的手动地址 {}", entry.address),
-            action: Action::Netsh(vec![
-                "interface".into(),
-                "ipv4".into(),
-                "delete".into(),
-                "address".into(),
-                adapter_arg(adapter_name),
-                format!("address={}", entry.address),
-            ]),
+        .map(|entry| {
+            Step::new(
+                format!("delete-address-{}", entry.address),
+                format!("移除旧的手动地址 {}", entry.address),
+                netsh_by_name(
+                    adapter_name,
+                    "delete",
+                    "address",
+                    &[format!("address={}", entry.address)],
+                ),
+            )
         })
         .collect()
 }
 
+/// 把一次应用请求翻译成 netsh 步骤序列。
+///
+/// 拆成三段（地址 / DNS / 跃点），每段只关心自己的字段；顺序即执行顺序。
 fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
     let adapter_name = before.name.as_str();
     let mut steps: Vec<Step> = Vec::new();
+    push_address_steps(&mut steps, adapter_name, before, request);
+    push_dns_steps(&mut steps, adapter_name, request);
+    push_metric_step(&mut steps, adapter_name, request.metric);
+    steps
+}
 
+/// 地址部分：切到 DHCP（顺手清理旧网关），或写入静态主地址与附加地址。
+fn push_address_steps(
+    steps: &mut Vec<Step>,
+    adapter_name: &str,
+    before: &AdapterInfo,
+    request: &ApplyRequest,
+) {
     if request.dhcp {
-        // A previous *static* configuration can leave its default gateway behind
-        // (Windows keeps the DHCP flag on Wi-Fi adapters). Only clean it when the
-        // adapter actually carried manual addresses - otherwise the gateway is a
-        // DHCP-provided route that has to stay.
-        let leaves_static_config = before
-            .ipv4
-            .addresses
-            .iter()
-            .any(|entry| entry.origin == "manual");
-        let stale_gateway = if leaves_static_config {
-            before
-                .ipv4
-                .gateway
-                .clone()
-                .filter(|value| !value.trim().is_empty())
-        } else {
-            None
-        };
-        if let Some(gateway) = stale_gateway {
-            steps.push(Step {
-                name: "cleanup-gateway".to_string(),
-                label: format!("清除旧的默认网关 {gateway}"),
-                action: Action::Netsh(vec![
-                    "interface".into(),
-                    "ipv4".into(),
-                    "delete".into(),
-                    "route".into(),
-                    "prefix=0.0.0.0/0".into(),
-                    format!("interface=\"{adapter_name}\""),
-                    format!("nexthop={gateway}"),
-                ]),
-            });
+        if let Some(step) = stale_gateway_step(adapter_name, before) {
+            steps.push(step);
         }
-        steps.push(Step {
-            name: "address-dhcp".to_string(),
-            label: "切换为自动获取（DHCP）".to_string(),
-            action: Action::Netsh(vec![
-                "interface".into(),
-                "ipv4".into(),
-                "set".into(),
-                "address".into(),
-                adapter_arg(adapter_name),
-                "source=dhcp".into(),
-            ]),
-        });
-    } else if let Some(primary) = request.addresses.first() {
-        let args: Vec<String> = vec![
-            "interface".into(),
-            "ipv4".into(),
-            "set".into(),
-            "address".into(),
-            adapter_arg(adapter_name),
-            "source=static".into(),
-            format!("address={}", primary.address),
-            format!("mask={}", subnet::mask_text_from_prefix(primary.prefix)),
-            format!("gateway={}", value_or_none(request.gateway.as_deref())),
-        ];
-        steps.push(Step {
-            name: "address-primary".to_string(),
-            label: format!("设置主 IP {}", primary.address),
-            action: Action::Netsh(args),
-        });
-
-        for (index, extra) in request.addresses.iter().enumerate().skip(1) {
-            steps.push(Step {
-                name: format!("address-extra-{index}"),
-                label: format!("添加附加 IP {}", extra.address),
-                action: Action::Netsh(vec![
-                    "interface".into(),
-                    "ipv4".into(),
-                    "add".into(),
-                    "address".into(),
-                    adapter_arg(adapter_name),
-                    format!("address={}", extra.address),
-                    format!("mask={}", subnet::mask_text_from_prefix(extra.prefix)),
-                ]),
-            });
-        }
+        steps.push(Step::new(
+            "address-dhcp",
+            "切换为自动获取（DHCP）",
+            netsh_by_name(adapter_name, "set", "address", &["source=dhcp".to_string()]),
+        ));
+        return;
     }
 
+    let Some(primary) = request.addresses.first() else {
+        return;
+    };
+    steps.push(Step::new(
+        "address-primary",
+        format!("设置主 IP {}", primary.address),
+        netsh_by_name(
+            adapter_name,
+            "set",
+            "address",
+            &[
+                "source=static".to_string(),
+                format!("address={}", primary.address),
+                format!("mask={}", subnet::mask_text_from_prefix(primary.prefix)),
+                format!("gateway={}", value_or_none(request.gateway.as_deref())),
+            ],
+        ),
+    ));
+
+    for (index, extra) in request.addresses.iter().enumerate().skip(1) {
+        steps.push(Step::new(
+            format!("address-extra-{index}"),
+            format!("添加附加 IP {}", extra.address),
+            netsh_by_name(
+                adapter_name,
+                "add",
+                "address",
+                &[
+                    format!("address={}", extra.address),
+                    format!("mask={}", subnet::mask_text_from_prefix(extra.prefix)),
+                ],
+            ),
+        ));
+    }
+}
+
+/// 切到 DHCP 时要清掉旧的静态默认网关（Windows 会在这类网卡上保留 DHCP 标志）。
+///
+/// 只清"原本就有手动地址"的网卡：否则那条网关是 DHCP 下发的路由，必须保留。
+fn stale_gateway_step(adapter_name: &str, before: &AdapterInfo) -> Option<Step> {
+    let leaves_static_config = before
+        .ipv4
+        .addresses
+        .iter()
+        .any(|entry| entry.origin == "manual");
+    if !leaves_static_config {
+        return None;
+    }
+    let gateway = before
+        .ipv4
+        .gateway
+        .clone()
+        .filter(|value| !value.trim().is_empty())?;
+    Some(Step::best_effort(
+        "cleanup-gateway",
+        format!("清除旧的默认网关 {gateway}"),
+        netsh_raw(
+            "delete",
+            "route",
+            &[
+                "prefix=0.0.0.0/0".to_string(),
+                interface_arg(adapter_name),
+                format!("nexthop={gateway}"),
+            ],
+        ),
+    ))
+}
+
+/// DNS 部分：静态首选 + 备用（`index=` 决定首选/备用顺序），或整组改回自动获取。
+fn push_dns_steps(steps: &mut Vec<Step>, adapter_name: &str, request: &ApplyRequest) {
     match request.dns_mode {
         DnsMode::Static if !request.dns.is_empty() => {
             let servers: Vec<String> = request
@@ -229,80 +296,75 @@ fn build_steps(before: &AdapterInfo, request: &ApplyRequest) -> Vec<Step> {
                 .map(|server| server.trim().to_string())
                 .filter(|server| !server.is_empty())
                 .collect();
-            if let Some(primary) = servers.first() {
-                steps.push(Step {
-                    name: "dns-primary".to_string(),
-                    label: format!("设置首选 DNS {primary}"),
-                    action: Action::Netsh(vec![
-                        "interface".into(),
-                        "ipv4".into(),
-                        "set".into(),
-                        "dnsservers".into(),
-                        adapter_arg(adapter_name),
-                        "source=static".into(),
+            let Some(primary) = servers.first() else {
+                return;
+            };
+            steps.push(Step::new(
+                "dns-primary",
+                format!("设置首选 DNS {primary}"),
+                netsh_by_name(
+                    adapter_name,
+                    "set",
+                    "dnsservers",
+                    &[
+                        "source=static".to_string(),
                         format!("address={primary}"),
-                        "register=primary".into(),
-                        "validate=no".into(),
-                    ]),
-                });
-            }
+                        "register=primary".to_string(),
+                        "validate=no".to_string(),
+                    ],
+                ),
+            ));
             for (index, server) in servers.iter().enumerate().skip(1) {
-                steps.push(Step {
-                    name: format!("dns-{index}"),
-                    label: format!("添加备用 DNS {server}"),
-                    action: Action::Netsh(vec![
-                        "interface".into(),
-                        "ipv4".into(),
-                        "add".into(),
-                        "dnsservers".into(),
-                        adapter_arg(adapter_name),
-                        format!("address={server}"),
-                        format!("index={}", index + 1),
-                        "validate=no".into(),
-                    ]),
-                });
+                steps.push(Step::new(
+                    format!("dns-{index}"),
+                    format!("添加备用 DNS {server}"),
+                    netsh_by_name(
+                        adapter_name,
+                        "add",
+                        "dnsservers",
+                        &[
+                            format!("address={server}"),
+                            format!("index={}", index + 1),
+                            "validate=no".to_string(),
+                        ],
+                    ),
+                ));
             }
         }
         DnsMode::Dhcp => {
-            steps.push(Step {
-                name: "dns-dhcp".to_string(),
-                label: "DNS 改为自动获取".to_string(),
-                action: Action::Netsh(vec![
-                    "interface".into(),
-                    "ipv4".into(),
-                    "set".into(),
-                    "dnsservers".into(),
-                    adapter_arg(adapter_name),
-                    "source=dhcp".into(),
-                ]),
-            });
+            steps.push(Step::new(
+                "dns-dhcp",
+                "DNS 改为自动获取",
+                netsh_by_name(adapter_name, "set", "dnsservers", &["source=dhcp".to_string()]),
+            ));
         }
         _ => {}
     }
+}
 
-    // The form is the desired end state, so the metric step is always emitted:
-    // an empty field means "back to automatic", which is what a restore of a
-    // backup captured without an explicit metric needs.
-    steps.push(Step {
-        name: "metric".to_string(),
-        label: match request.metric {
-            Some(metric) => format!("设置接口跃点数 {metric}"),
-            None => "恢复自动跃点数".to_string(),
-        },
-        action: Action::Netsh(vec![
-            "interface".into(),
-            "ipv4".into(),
-            "set".into(),
-            "interface".into(),
-            format!("interface=\"{adapter_name}\""),
-            match request.metric {
-                Some(metric) => format!("metric={metric}"),
-                None => "metric=automatic".to_string(),
-            },
-        ]),
-    });
+/// 表单就是期望的最终状态，所以跃点步骤总是发出：留空表示"恢复自动"，
+/// 这正是一份没有显式跃点的备份被恢复时需要的动作。
+fn push_metric_step(steps: &mut Vec<Step>, adapter_name: &str, metric: Option<u32>) {
+    let (label, value) = match metric {
+        Some(metric) => (
+            format!("设置接口跃点数 {metric}"),
+            format!("metric={metric}"),
+        ),
+        None => ("恢复自动跃点数".to_string(), "metric=automatic".to_string()),
+    };
+    steps.push(Step::new(
+        "metric",
+        label,
+        netsh_raw("set", "interface", &[interface_arg(adapter_name), value]),
+    ));
+}
 
-    steps
+/// 清理类步骤是"尽力而为"的：目标可能已经不存在，执行失败不算写入失败。
+///
+/// 这条规则决定"失败步骤算不算失败"，因此必须是显式可测的谓词，
+/// 而不是散在 `run_step` 里的字符串前缀判断。
+fn is_best_effort(step: &Step) -> bool {
+    step.best_effort
 }
 
 fn run_step(step: &Step) -> StepResult {
@@ -312,8 +374,8 @@ fn run_step(step: &Step) -> StepResult {
                 // `source=dhcp` reports failure when DHCP is already enabled on the
                 // interface; that is the state we want, so treat it as success.
                 let benign = !outcome.ok && is_benign_dhcp_message(&outcome.output);
-                // Cleanup steps are best-effort: the route may already be gone.
-                let tolerant = step.name.starts_with("cleanup-");
+                // 清理类步骤是尽力而为的：旧路由可能本来就不存在。
+                let tolerant = is_best_effort(step);
                 StepResult {
                     step: step.name.clone(),
                     label: step.label.clone(),
@@ -436,10 +498,6 @@ fn peer_addresses(exclude: &str) -> Vec<(String, Vec<String>)> {
             )
         })
         .collect()
-}
-
-pub fn test_only_peer_addresses(exclude: &str) -> Vec<(String, Vec<String>)> {
-    peer_addresses(exclude)
 }
 
 pub fn validate_request(info: &AdapterInfo, request: &ApplyRequest) -> Vec<ValidationIssue> {
@@ -800,14 +858,6 @@ pub fn apply(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
     })
 }
 
-/// Applies the request but tolerates verification failure (used by the
-/// acceptance harness and by "apply and keep" flows).
-pub fn apply_unverified(request: &ApplyRequest) -> AppResult<crate::dto::ApplyResult> {
-    let mut tolerant = request.clone();
-    tolerant.no_rollback = true;
-    apply(&tolerant)
-}
-
 /// Captures the current configuration of an adapter by id.
 pub fn backup_of_id(adapter_id: &str) -> AppResult<AdapterBackup> {
     Ok(backup_of(&adapters::get(adapter_id)?))
@@ -961,6 +1011,180 @@ mod tests {
         assert!(netsh_args(&fixed, "metric").contains(&"metric=20".to_string()));
         let automatic = build_steps(&info, &dhcp_request());
         assert!(netsh_args(&automatic, "metric").contains(&"metric=automatic".to_string()));
+    }
+
+    /// 完整的 netsh 参数序列（顺序与内容）是写入路径的对外契约，
+    /// 这些用例是"改结构不改行为"的护栏。
+    #[test]
+    fn build_steps_static_argv_is_stable() {
+        let info = adapter(vec![("10.0.0.9", 24, "manual")], Some("10.0.0.1"));
+        let mut request = static_request(&[("10.0.0.9", 24), ("10.0.0.10", 24)], Some("10.0.0.1"));
+        request.dns = vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()];
+        let steps = build_steps(&info, &request);
+
+        assert_eq!(
+            step_names(&steps),
+            vec![
+                "address-primary",
+                "address-extra-1",
+                "dns-primary",
+                "dns-1",
+                "metric"
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "address-primary"),
+            vec![
+                "interface",
+                "ipv4",
+                "set",
+                "address",
+                "name=\"测试网卡\"",
+                "source=static",
+                "address=10.0.0.9",
+                "mask=255.255.255.0",
+                "gateway=10.0.0.1",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "address-extra-1"),
+            vec![
+                "interface",
+                "ipv4",
+                "add",
+                "address",
+                "name=\"测试网卡\"",
+                "address=10.0.0.10",
+                "mask=255.255.255.0",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "dns-primary"),
+            vec![
+                "interface",
+                "ipv4",
+                "set",
+                "dnsservers",
+                "name=\"测试网卡\"",
+                "source=static",
+                "address=1.1.1.1",
+                "register=primary",
+                "validate=no",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "dns-1"),
+            vec![
+                "interface",
+                "ipv4",
+                "add",
+                "dnsservers",
+                "name=\"测试网卡\"",
+                "address=8.8.8.8",
+                "index=2",
+                "validate=no",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "metric"),
+            vec![
+                "interface",
+                "ipv4",
+                "set",
+                "interface",
+                "interface=\"测试网卡\"",
+                "metric=20",
+            ]
+        );
+
+        // 未填网关时显式写 `gateway=none`（相当于"不设置网关"）
+        let no_gateway = build_steps(&info, &static_request(&[("10.0.0.9", 24)], None));
+        assert!(netsh_args(&no_gateway, "address-primary").contains(&"gateway=none".to_string()));
+    }
+
+    #[test]
+    fn build_steps_dhcp_argv_is_stable() {
+        let info = adapter(vec![("10.0.0.9", 24, "manual")], Some("10.0.0.1"));
+        let steps = build_steps(&info, &dhcp_request());
+
+        assert_eq!(
+            step_names(&steps),
+            vec!["cleanup-gateway", "address-dhcp", "dns-dhcp", "metric"]
+        );
+        assert_eq!(
+            netsh_args(&steps, "cleanup-gateway"),
+            vec![
+                "interface",
+                "ipv4",
+                "delete",
+                "route",
+                "prefix=0.0.0.0/0",
+                "interface=\"测试网卡\"",
+                "nexthop=10.0.0.1",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "address-dhcp"),
+            vec![
+                "interface",
+                "ipv4",
+                "set",
+                "address",
+                "name=\"测试网卡\"",
+                "source=dhcp",
+            ]
+        );
+        assert_eq!(
+            netsh_args(&steps, "dns-dhcp"),
+            vec![
+                "interface",
+                "ipv4",
+                "set",
+                "dnsservers",
+                "name=\"测试网卡\"",
+                "source=dhcp",
+            ]
+        );
+        assert!(netsh_args(&steps, "metric").contains(&"metric=automatic".to_string()));
+    }
+
+    /// 只有"清除旧的默认网关"是尽力而为的步骤：删旧地址、写地址、改 DNS、改跃点
+    /// 失败都必须如实上报为失败步骤。
+    #[test]
+    fn only_the_gateway_cleanup_step_is_best_effort() {
+        let info = adapter(
+            vec![("10.0.0.9", 24, "manual"), ("10.0.0.10", 24, "manual")],
+            Some("10.0.0.1"),
+        );
+        let request = static_request(&[("10.0.0.9", 24)], None);
+
+        let cleanup = cleanup_steps("测试网卡", &info, &request);
+        assert!(!cleanup.is_empty());
+        assert!(
+            cleanup.iter().all(|step| !is_best_effort(step)),
+            "{:?}",
+            step_names(&cleanup)
+        );
+
+        let steps = build_steps(&info, &request);
+        assert!(
+            steps.iter().all(|step| !is_best_effort(step)),
+            "{:?}",
+            step_names(&steps)
+        );
+
+        let dhcp = build_steps(&info, &dhcp_request());
+        assert_eq!(
+            dhcp.iter().filter(|step| is_best_effort(step)).count(),
+            1,
+            "{:?}",
+            step_names(&dhcp)
+        );
+        let gateway = dhcp
+            .iter()
+            .find(|step| step.name == "cleanup-gateway")
+            .expect("DHCP 切换应清理旧网关");
+        assert!(is_best_effort(gateway));
     }
 
     #[test]

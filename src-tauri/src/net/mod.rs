@@ -8,7 +8,7 @@ pub mod identity;
 pub mod registry;
 pub mod write;
 
-use windows::core::{GUID, PSTR, PWSTR};
+use windows::core::{PSTR, PWSTR};
 use windows::Win32::Networking::WinSock::{SOCKADDR_IN, SOCKET_ADDRESS, AF_INET};
 
 /// Reads a NUL-terminated wide string without assuming an owning wrapper.
@@ -46,25 +46,6 @@ pub unsafe fn socket_address_to_ipv4(address: &SOCKET_ADDRESS) -> Option<String>
     let sockaddr_in = &*(address.lpSockaddr as *const SOCKADDR_IN);
     let raw = sockaddr_in.sin_addr.S_un.S_addr;
     Some(crate::subnet::format_ipv4(u32::from_be(raw)))
-}
-
-/// Renders a GUID the way Windows does (`{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`).
-pub fn guid_to_string(guid: &GUID) -> String {
-    let bytes = guid.data4;
-    format!(
-        "{{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        guid.data1,
-        guid.data2,
-        guid.data3,
-        bytes[0],
-        bytes[1],
-        bytes[2],
-        bytes[3],
-        bytes[4],
-        bytes[5],
-        bytes[6],
-        bytes[7]
-    )
 }
 
 pub fn format_mac(bytes: &[u8]) -> String {

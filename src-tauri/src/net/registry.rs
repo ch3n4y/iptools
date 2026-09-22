@@ -193,13 +193,6 @@ pub fn hostname() -> Option<String> {
     get_text(&key, "Hostname").or_else(|| get_text(&key, "NV Hostname"))
 }
 
-pub fn domain() -> Option<String> {
-    let key = local_machine()
-        .open_subkey_with_flags(TCPIP_PARAMETERS, KEY_READ)
-        .ok()?;
-    get_text(&key, "Domain")
-}
-
 pub fn workgroup_or_domain() -> Option<String> {
     let key = local_machine()
         .open_subkey_with_flags(TCPIP_PARAMETERS, KEY_READ)

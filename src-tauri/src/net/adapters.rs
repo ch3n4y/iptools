@@ -1,21 +1,20 @@
 //! Adapter enumeration and the read-back used to verify writes.
 //!
 //! Data comes from `GetAdaptersAddresses` (addresses, gateway, DNS, status),
-//! `GetIfEntry2` (media connect state, permanent MAC), `GetIpInterfaceEntry`
-//! (metric) and the registry (DHCP flag, MAC override, device state).
+//! `GetIfEntry2` (media connect state, permanent MAC) and the registry (DHCP flag,
+//! MAC override, device state).
 
 use windows::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, NO_ERROR};
 use windows::Win32::NetworkManagement::IpHelper::{
-    GetAdaptersAddresses, GetIfEntry2, GetIpInterfaceEntry, SetIpInterfaceEntry,
-    GAA_FLAG_INCLUDE_GATEWAYS, GAA_FLAG_INCLUDE_PREFIX, GAA_FLAG_SKIP_ANYCAST,
-    GAA_FLAG_SKIP_MULTICAST, IP_ADAPTER_ADDRESSES_LH, MIB_IF_ROW2, MIB_IPINTERFACE_ROW,
+    GetAdaptersAddresses, GetIfEntry2, GAA_FLAG_INCLUDE_GATEWAYS, GAA_FLAG_INCLUDE_PREFIX,
+    GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_MULTICAST, IP_ADAPTER_ADDRESSES_LH, MIB_IF_ROW2,
 };
 use windows::Win32::NetworkManagement::Ndis::{
     IfOperStatusDown, IfOperStatusLowerLayerDown, IfOperStatusNotPresent, IfOperStatusUp,
     MediaConnectStateConnected, MediaConnectStateDisconnected, NET_LUID_LH,
 };
 use windows::Win32::Networking::WinSock::{
-    IpPrefixOriginDhcp, IpPrefixOriginManual, NL_PREFIX_ORIGIN, AF_INET, AF_UNSPEC,
+    IpPrefixOriginDhcp, IpPrefixOriginManual, NL_PREFIX_ORIGIN, AF_UNSPEC,
 };
 
 use crate::dto::{AdapterInfo, AdapterStatus, AddressEntry, DnsView, Ipv4View};
@@ -332,56 +331,6 @@ pub fn get(id: &str) -> AppResult<AdapterInfo> {
                 .detail(id.to_string())
                 .hint("网卡可能已被移除，请刷新后重试")
         })
-}
-
-pub fn luid_of(id: &str) -> Option<NET_LUID_LH> {
-    enumerate()
-        .ok()?
-        .into_iter()
-        .find(|adapter| adapter.info.id.eq_ignore_ascii_case(id))
-        .map(|adapter| NET_LUID_LH {
-            Value: adapter.luid_value,
-        })
-}
-
-/// Interface metric. `None` means "automatic metric".
-pub fn metric_of(id: &str) -> Option<u32> {
-    let luid = luid_of(id)?;
-    unsafe {
-        let mut row: MIB_IPINTERFACE_ROW = std::mem::zeroed();
-        row.Family = AF_INET;
-        row.InterfaceLuid = luid;
-        if GetIpInterfaceEntry(&mut row) != NO_ERROR {
-            return None;
-        }
-        if row.UseAutomaticMetric {
-            None
-        } else {
-            Some(row.Metric)
-        }
-    }
-}
-
-pub fn set_metric(id: &str, metric: u32) -> AppResult<()> {
-    let luid = luid_of(id).ok_or_else(|| {
-        AppError::new(ErrorCode::AdapterNotFound, "未找到指定的网卡").detail(id.to_string())
-    })?;
-    unsafe {
-        let mut row: MIB_IPINTERFACE_ROW = std::mem::zeroed();
-        row.Family = AF_INET;
-        row.InterfaceLuid = luid;
-        let status = GetIpInterfaceEntry(&mut row);
-        if status != NO_ERROR {
-            return Err(win32_error(status.0, "读取网卡跃点数失败"));
-        }
-        row.UseAutomaticMetric = false;
-        row.Metric = metric;
-        let status = SetIpInterfaceEntry(&mut row);
-        if status != NO_ERROR {
-            return Err(win32_error(status.0, "设置网卡跃点数失败"));
-        }
-    }
-    Ok(())
 }
 
 /// The currently connected adapter that owns a default gateway (used by the
